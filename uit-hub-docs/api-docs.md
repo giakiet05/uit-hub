@@ -647,7 +647,70 @@ Gia hạn học phí.
 
 **Response JSON Schema:** SuccessResponse
 
+### 2.19 GET /announcement
+
+Danh sách announcement.
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
 ---
+
+### 2.20 GET /rooms/availability
+
+Tra cứu phòng trống.
+
+**Query:** `date`, `start`, `end`
+
+**Query JSON Schema:** QueryRoomsAvailability
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+---
+
+### 2.21 POST /contact
+
+Gửi liên hệ.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContactRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "email", "subject", "message"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "email": { "type": "string", "format": "email" },
+    "phone": { "type": "string" },
+    "subject": { "type": "string", "minLength": 1 },
+    "message": { "type": "string", "minLength": 1 }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+````
 
 ## 3. Courses (course.uit.edu.vn)
 
@@ -659,7 +722,7 @@ Danh sách deadlines/bài tập.
 
 ```json
 { "message": "Successfully!", "data": {} }
-```
+````
 
 **Response JSON Schema:** SuccessResponse
 
@@ -757,71 +820,4 @@ Nộp bài cho assignment.
 
 **Response JSON Schema:** SuccessResponse
 
----
-
-## 4. Announcement
-
-### 4.1 GET /announcement
-
-Danh sách announcement.
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
----
-
-## 5. Rooms
-
-### 5.1 GET /rooms/availability
-
-Tra cứu phòng trống.
-
-**Query:** `date`, `start`, `end`
-
-**Query JSON Schema:** QueryRoomsAvailability
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
----
-
-### 6.1 POST /contact
-
-Gửi liên hệ.
-
-**Request JSON Schema:**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ContactRequest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["name", "email", "subject", "message"],
-  "properties": {
-    "name": { "type": "string", "minLength": 1 },
-    "email": { "type": "string", "format": "email" },
-    "phone": { "type": "string" },
-    "subject": { "type": "string", "minLength": 1 },
-    "message": { "type": "string", "minLength": 1 }
-  }
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
+## 3. CTSV (https://ctsv.uit.edu.vn)
