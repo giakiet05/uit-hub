@@ -1,6 +1,32 @@
-## JSON Schema (Common)
+# API Specification (UIT Hub)
 
-### SuccessResponse (generic)
+## Base URL
+
+## Success Response Format
+
+```json
+{
+  "message": "Successfully!",
+  "data": {}
+}
+```
+
+## Error Response Format
+
+```json
+{
+  "message": "Internal error happened!",
+  "error_code": "INTERNAL_ERROR"
+}
+```
+
+---
+
+## JSON Schema
+
+### Common
+
+#### SuccessResponse (generic)
 
 ```json
 {
@@ -16,7 +42,7 @@
 }
 ```
 
-### ErrorResponse (generic)
+#### ErrorResponse (generic)
 
 ```json
 {
@@ -32,9 +58,9 @@
 }
 ```
 
-### Common Params
+#### Common Params
 
-#### Query: year + semester
+##### Query: year + semester
 
 ```json
 {
@@ -50,7 +76,7 @@
 }
 ```
 
-#### Query: rooms availability (date + start + end)
+##### Query: rooms availability (date + start + end)
 
 ```json
 {
@@ -77,7 +103,7 @@
 }
 ```
 
-#### Path: courseId
+##### Path: courseId
 
 ```json
 {
@@ -92,7 +118,7 @@
 }
 ```
 
-#### Path: assignmentId
+##### Path: assignmentId
 
 ```json
 {
@@ -107,7 +133,7 @@
 }
 ```
 
-#### Path: slugs
+##### Path: slugs
 
 ```json
 {
@@ -132,16 +158,23 @@
 
 Đăng nhập.
 
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
+**Request JSON Schema:**
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "LoginRequest",
   "type": "object",
-  "additionalProperties": true
+  "additionalProperties": false,
+  "required": ["student_id", "password"],
+  "properties": {
+    "student_id": {
+      "type": "string",
+      "description": "MSSV (ví dụ 2252xxxx)"
+    },
+    "password": { "type": "string", "minLength": 1 },
+    "remember_me": { "type": "boolean", "default": false }
+  }
 }
 ```
 
@@ -155,7 +188,7 @@
 
 ---
 
-## 2. Student
+## 2. Student (daa.uit.edu.vn)
 
 ### 2.1 GET /student/profile
 
@@ -285,7 +318,340 @@ Lấy survey form (nếu có).
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.11 GET /student/deadlines
+### 2.11 POST /student/transcript-regis
+
+Đăng ký transcript.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TranscriptRegisRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["copies", "delivery_method"],
+  "properties": {
+    "copies": { "type": "integer", "minimum": 1, "default": 1 },
+    "language": { "type": "string", "enum": ["VI", "EN"], "default": "VI" },
+    "delivery_method": { "type": "string", "enum": ["PICKUP", "SHIP"] },
+    "shipping_address": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Bắt buộc nếu delivery_method=SHIP"
+    },
+    "phone": { "type": "string", "minLength": 6 },
+    "note": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "delivery_method": { "const": "SHIP" } },
+        "required": ["delivery_method"]
+      },
+      "then": { "required": ["shipping_address", "phone"] }
+    }
+  ]
+}
+```
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+### 2.12 POST /student/referral
+
+Tạo yêu cầu giấy giới thiệu / referral.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReferralRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["recipient", "purpose"],
+  "properties": {
+    "recipient": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Đơn vị/Người nhận (vd: Công ty/Phòng ban)"
+    },
+    "purpose": { "type": "string", "minLength": 1 },
+    "from_date": {
+      "type": "string",
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "to_date": {
+      "type": "string",
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "contact_email": { "type": "string", "format": "email" },
+    "note": { "type": "string" }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+### 2.13 POST /student/tuition-extend
+
+Gia hạn học phí.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TuitionExtendRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["year", "semester", "requested_due_date", "reason"],
+  "properties": {
+    "year": { "type": "integer", "minimum": 1900 },
+    "semester": { "type": "integer", "minimum": 1 },
+    "requested_due_date": {
+      "type": "string",
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "reason": { "type": "string", "minLength": 1 },
+    "phone": { "type": "string", "minLength": 6 },
+    "attachments": {
+      "type": "array",
+      "description": "Danh sách URL/ID tệp minh chứng (nếu có)",
+      "items": { "type": "string" },
+      "default": []
+    }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+### 2.14 POST /student/outpatient-regis
+
+Đăng ký ngoại trú.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OutpatientRegisRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["address", "start_date", "landlord_name", "landlord_phone"],
+  "properties": {
+    "address": { "type": "string", "minLength": 1 },
+    "province": { "type": "string" },
+    "district": { "type": "string" },
+    "ward": { "type": "string" },
+    "start_date": {
+      "type": "string",
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "end_date": {
+      "type": "string",
+      "description": "YYYY-MM-DD",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "landlord_name": { "type": "string", "minLength": 1 },
+    "landlord_phone": { "type": "string", "minLength": 6 },
+    "note": { "type": "string" },
+    "attachments": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+### 2.15 POST /student/eor-regis
+
+Đăng ký EOR.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EorRegisRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["year", "semester", "subject_code", "reason"],
+  "properties": {
+    "year": { "type": "integer", "minimum": 1900 },
+    "semester": { "type": "integer", "minimum": 1 },
+    "subject_code": { "type": "string", "minLength": 1 },
+    "subject_name": { "type": "string" },
+    "reason": { "type": "string", "minLength": 1 },
+    "contact_phone": { "type": "string", "minLength": 6 },
+    "attachments": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+### 2.16 POST /student/monthly-parking
+
+Đăng ký gửi xe tháng.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MonthlyParkingRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["vehicle_type", "plate_number", "months", "start_month"],
+  "properties": {
+    "vehicle_type": {
+      "type": "string",
+      "enum": ["MOTORBIKE", "CAR", "BICYCLE"]
+    },
+    "plate_number": { "type": "string", "minLength": 3 },
+    "months": { "type": "integer", "minimum": 1, "maximum": 12 },
+    "start_month": {
+      "type": "string",
+      "description": "YYYY-MM",
+      "pattern": "^\\d{4}-\\d{2}$"
+    },
+    "owner_name": { "type": "string" },
+    "note": { "type": "string" }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+### 2.17 POST /student/graduate
+
+Đăng ký tốt nghiệp.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GraduateRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["year", "semester", "email", "phone"],
+  "properties": {
+    "year": { "type": "integer", "minimum": 1900 },
+    "semester": { "type": "integer", "minimum": 1 },
+    "email": { "type": "string", "format": "email" },
+    "phone": { "type": "string", "minLength": 6 },
+    "address": { "type": "string" },
+    "note": { "type": "string" }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+### 2.18 POST /student/graduation-thesis
+
+Đăng ký khóa luận tốt nghiệp.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GraduationThesisRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["thesis_title", "advisor_name", "team_members"],
+  "properties": {
+    "thesis_title": { "type": "string", "minLength": 1 },
+    "advisor_name": { "type": "string", "minLength": 1 },
+    "advisor_email": { "type": "string", "format": "email" },
+    "team_members": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["student_id"],
+        "properties": {
+          "student_id": { "type": "string", "minLength": 1 },
+          "full_name": { "type": "string" }
+        }
+      }
+    },
+    "note": { "type": "string" }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{ "message": "Successfully!", "data": {} }
+```
+
+**Response JSON Schema:** SuccessResponse
+
+---
+
+## 3. Courses (course.uit.edu.vn)
+
+### 3.1 GET /student/deadlines
 
 Danh sách deadlines/bài tập.
 
@@ -297,7 +663,7 @@ Danh sách deadlines/bài tập.
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.12 GET /student/courses/{courseId}/materials
+### 3.2 GET /student/courses/{courseId}/materials
 
 Tài liệu môn học theo `courseId`.
 
@@ -313,7 +679,7 @@ Tài liệu môn học theo `courseId`.
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.13 GET /student/courses/{courseId}/assignments
+### 3.3 GET /student/courses/{courseId}/assignments
 
 Bài tập theo `courseId`.
 
@@ -329,207 +695,7 @@ Bài tập theo `courseId`.
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.14 POST /student/transcript-regis
-
-Đăng ký transcript.
-
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "TranscriptRegisRequest",
-  "type": "object",
-  "additionalProperties": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.15 POST /student/referral
-
-Tạo yêu cầu referral.
-
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ReferralRequest",
-  "type": "object",
-  "additionalProperties": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.16 POST /student/tuition-extend
-
-Gia hạn học phí.
-
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "TuitionExtendRequest",
-  "type": "object",
-  "additionalProperties": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.17 POST /student/outpatient-regis
-
-Đăng ký ngoại trú.
-
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OutpatientRegisRequest",
-  "type": "object",
-  "additionalProperties": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.18 POST /student/eor-regis
-
-Đăng ký EOR.
-
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "EorRegisRequest",
-  "type": "object",
-  "additionalProperties": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.19 POST /student/monthly-parking
-
-Đăng ký gửi xe tháng.
-
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "MonthlyParkingRequest",
-  "type": "object",
-  "additionalProperties": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.20 POST /student/graduate
-
-Đăng ký tốt nghiệp.
-
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "GraduateRequest",
-  "type": "object",
-  "additionalProperties": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.21 POST /student/graduation-thesis
-
-Đăng ký khóa luận tốt nghiệp.
-
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "GraduationThesisRequest",
-  "type": "object",
-  "additionalProperties": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.22 POST /student/assignments/{assignmentId}/submissions
+### 3.4 POST /student/assignments/{assignmentId}/submissions
 
 Nộp bài cho assignment.
 
@@ -537,16 +703,49 @@ Nộp bài cho assignment.
 
 **Path JSON Schema:** PathAssignmentId
 
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
+**Request JSON Schema:**
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AssignmentSubmissionRequest",
   "type": "object",
-  "additionalProperties": true
+  "additionalProperties": false,
+  "required": ["submission_type"],
+  "properties": {
+    "submission_type": { "type": "string", "enum": ["FILE", "LINK", "TEXT"] },
+    "text": { "type": "string" },
+    "url": { "type": "string", "format": "uri" },
+    "file_urls": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "comment": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "submission_type": { "const": "TEXT" } },
+        "required": ["submission_type"]
+      },
+      "then": { "required": ["text"] }
+    },
+    {
+      "if": {
+        "properties": { "submission_type": { "const": "LINK" } },
+        "required": ["submission_type"]
+      },
+      "then": { "required": ["url"] }
+    },
+    {
+      "if": {
+        "properties": { "submission_type": { "const": "FILE" } },
+        "required": ["submission_type"]
+      },
+      "then": { "required": ["file_urls"] }
+    }
+  ]
 }
 ```
 
@@ -560,11 +759,11 @@ Nộp bài cho assignment.
 
 ---
 
-## 3. Notifications
+## 4. Announcement
 
-### 3.1 GET /notifications
+### 4.1 GET /announcement
 
-Danh sách notifications.
+Danh sách announcement.
 
 **Response (200 OK):**
 
@@ -576,9 +775,9 @@ Danh sách notifications.
 
 ---
 
-## 4. Rooms
+## 5. Rooms
 
-### 4.1 GET /rooms/availability
+### 5.1 GET /rooms/availability
 
 Tra cứu phòng trống.
 
@@ -596,87 +795,26 @@ Tra cứu phòng trống.
 
 ---
 
-## 5. Other
-
-### 5.1 GET /annual-plan
-
-Lấy annual plan.
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 5.2 GET /program/{slugs}
-
-Lấy thông tin chương trình theo slug.
-
-**Path params:** `slugs`
-
-**Path JSON Schema:** PathProgramSlugs
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 5.3 GET /tutorial
-
-Lấy tutorial.
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 5.4 POST /contact
+### 6.1 POST /contact
 
 Gửi liên hệ.
 
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
+**Request JSON Schema:**
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ContactRequest",
   "type": "object",
-  "additionalProperties": true
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 5.5 POST /verification
-
-Gửi/kiểm tra verification.
-
-**Request:** (chưa có mô tả chi tiết trong tài liệu hiện tại)
-
-**Request JSON Schema (generic):**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "VerificationRequest",
-  "type": "object",
-  "additionalProperties": true
+  "additionalProperties": false,
+  "required": ["name", "email", "subject", "message"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "email": { "type": "string", "format": "email" },
+    "phone": { "type": "string" },
+    "subject": { "type": "string", "minLength": 1 },
+    "message": { "type": "string", "minLength": 1 }
+  }
 }
 ```
 
