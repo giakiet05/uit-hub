@@ -2,6 +2,14 @@
 
 ## Base URL
 
+- Fake server (local): `http://localhost:<PORT>`
+- Production (nếu có): TBD
+
+## Authentication
+
+- Nếu fake server không cần auth: bỏ qua.
+- Nếu cần auth: sau khi `POST /login`, client gửi header `Authorization: Bearer <token>` cho các endpoint phía dưới.
+
 ## Success Response Format
 
 ```json
@@ -168,10 +176,7 @@
   "additionalProperties": false,
   "required": ["student_id", "password"],
   "properties": {
-    "student_id": {
-      "type": "string",
-      "description": "MSSV (ví dụ 2252xxxx)"
-    },
+    "student_id": { "type": "string", "description": "MSSV (ví dụ 2252xxxx)" },
     "password": { "type": "string", "minLength": 1 },
     "remember_me": { "type": "boolean", "default": false }
   }
@@ -647,21 +652,7 @@ Gia hạn học phí.
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.19 GET /announcement
-
-Danh sách announcement.
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
----
-
-### 2.20 GET /rooms/availability
+### 2.19 GET /rooms/availability
 
 Tra cứu phòng trống.
 
@@ -679,7 +670,7 @@ Tra cứu phòng trống.
 
 ---
 
-### 2.21 POST /contact
+### 2.20 POST /contact
 
 Gửi liên hệ.
 
@@ -710,9 +701,9 @@ Gửi liên hệ.
 
 **Response JSON Schema:** SuccessResponse
 
-````
+---
 
-## 3. Courses (course.uit.edu.vn)
+## 3. Course (course.uit.edu.vn)
 
 ### 3.1 GET /student/deadlines
 
@@ -722,7 +713,7 @@ Danh sách deadlines/bài tập.
 
 ```json
 { "message": "Successfully!", "data": {} }
-````
+```
 
 **Response JSON Schema:** SuccessResponse
 
@@ -820,4 +811,287 @@ Nộp bài cho assignment.
 
 **Response JSON Schema:** SuccessResponse
 
-## 3. CTSV (https://ctsv.uit.edu.vn)
+---
+
+## 4. CTSV
+
+### 4.1 POST /student/confirm-letter
+
+Tạo yêu cầu **Giấy xác nhận sinh viên** (dịch vụ trực tuyến).
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConfirmLetterRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["language", "reason", "request_type"],
+  "properties": {
+    "language": {
+      "type": "string",
+      "enum": ["VI", "EN"],
+      "description": "Ngôn ngữ của giấy xác nhận"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "MILITARY_DEFERMENT",
+        "DORM_EXTEND",
+        "TAX_DEDUCTION_DOCS",
+        "DEFENSE_EDU_REGISTRATION",
+        "OTHER"
+      ],
+      "description": "Lý do xác nhận (dùng mã enum để ổn định)"
+    },
+    "other_reason": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^Bổ sung hồ sơ\\b.*$",
+      "description": "Chỉ dùng khi reason=OTHER. Phải bắt đầu bằng 'Bổ sung hồ sơ ...'"
+    },
+    "request_type": {
+      "type": "string",
+      "enum": ["NEW", "REISSUE"],
+      "description": "NEW=Đăng ký giấy, REISSUE=Làm lại"
+    },
+    "note": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "reason": { "const": "OTHER" } },
+        "required": ["reason"]
+      },
+      "then": { "required": ["other_reason"] },
+      "else": {
+        "not": { "required": ["other_reason"] }
+      }
+    }
+  ]
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Successfully!",
+  "data": {
+    "request_id": "uuid",
+    "status": "PENDING",
+    "created_at": "timestamp",
+    "pdf_url": null
+  }
+}
+```
+
+**Response JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConfirmLetterResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["message", "data"],
+  "properties": {
+    "message": { "type": "string" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "status", "created_at", "pdf_url"],
+      "properties": {
+        "request_id": { "type": "string", "description": "UUID" },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "PROCESSING", "READY", "REJECTED"],
+          "description": "Trạng thái xử lý"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "description": "Unix timestamp (seconds hoặc milliseconds)"
+            },
+            { "type": "string", "description": "ISO datetime" }
+          ]
+        },
+        "pdf_url": {
+          "anyOf": [{ "type": "string", "format": "uri" }, { "type": "null" }],
+          "description": "Link tải PDF (có thể null nếu chưa sẵn sàng)"
+        }
+      }
+    }
+  }
+}
+```
+
+### 4.2 POST /student/bank-loans
+
+Đăng ký **Giấy xác nhận vay vốn ngân hàng**.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BankLoansRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["benefit", "orphan_status", "template"],
+  "properties": {
+    "benefit": {
+      "type": "string",
+      "enum": ["NO_DISCOUNT", "TUITION_REDUCTION", "TUITION_EXEMPTION"],
+      "description": "Thuộc diện: không miễn giảm / giảm học phí / miễn học phí"
+    },
+    "orphan_status": {
+      "type": "string",
+      "enum": ["NOT_ORPHAN", "ORPHAN"],
+      "description": "Thuộc đối tượng: không mồ côi / mồ côi"
+    },
+    "template": {
+      "type": "string",
+      "enum": ["LEGACY", "STEM"],
+      "description": "Mẫu giấy xác nhận: mẫu cũ / STEM"
+    },
+    "note": { "type": "string" }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Successfully!",
+  "data": {
+    "request_id": "uuid",
+    "status": "PENDING",
+    "created_at": "timestamp",
+    "pdf_url": null
+  }
+}
+```
+
+**Response JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BankLoansResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["message", "data"],
+  "properties": {
+    "message": { "type": "string" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "status", "created_at", "pdf_url"],
+      "properties": {
+        "request_id": { "type": "string", "description": "UUID" },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "PROCESSING", "READY", "REJECTED"],
+          "description": "Trạng thái xử lý"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "description": "Unix timestamp (seconds hoặc milliseconds)"
+            },
+            { "type": "string", "description": "ISO datetime" }
+          ]
+        },
+        "pdf_url": {
+          "anyOf": [{ "type": "string", "format": "uri" }, { "type": "null" }],
+          "description": "Link tải PDF (có thể null nếu chưa sẵn sàng)"
+        }
+      }
+    }
+  }
+}
+```
+
+### 4.3 POST /student/training-point-confirm
+
+Đăng ký **Giấy xác nhận điểm rèn luyện**.
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TrainingPointConfirmRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["language"],
+  "properties": {
+    "language": {
+      "type": "string",
+      "enum": ["VI", "EN"],
+      "description": "Ngôn ngữ của giấy xác nhận"
+    },
+    "note": { "type": "string" }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Successfully!",
+  "data": {
+    "request_id": "uuid",
+    "status": "PENDING",
+    "created_at": "timestamp",
+    "pdf_url": null
+  }
+}
+```
+
+**Response JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TrainingPointConfirmResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["message", "data"],
+  "properties": {
+    "message": { "type": "string" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "status", "created_at", "pdf_url"],
+      "properties": {
+        "request_id": { "type": "string", "description": "UUID" },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "PROCESSING", "READY", "REJECTED"],
+          "description": "Trạng thái xử lý"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "description": "Unix timestamp (seconds hoặc milliseconds)"
+            },
+            { "type": "string", "description": "ISO datetime" }
+          ]
+        },
+        "pdf_url": {
+          "anyOf": [{ "type": "string", "format": "uri" }, { "type": "null" }],
+          "description": "Link tải PDF (có thể null nếu chưa sẵn sàng)"
+        }
+      }
+    }
+  }
+}
+```
