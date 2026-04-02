@@ -299,18 +299,6 @@ Tra cứu điểm rèn luyện.
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.9 GET /student/lookup/office365
-
-Tra cứu thông tin Office365.
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
 ### 2.10 GET /student/survey-form
 
 Lấy survey form (nếu có).
@@ -368,51 +356,7 @@ Lấy survey form (nếu có).
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.12 POST /student/referral
-
-Tạo yêu cầu giấy giới thiệu / referral.
-
-**Request JSON Schema:**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ReferralRequest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["recipient", "purpose"],
-  "properties": {
-    "recipient": {
-      "type": "string",
-      "minLength": 1,
-      "description": "Đơn vị/Người nhận (vd: Công ty/Phòng ban)"
-    },
-    "purpose": { "type": "string", "minLength": 1 },
-    "from_date": {
-      "type": "string",
-      "description": "YYYY-MM-DD",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-    },
-    "to_date": {
-      "type": "string",
-      "description": "YYYY-MM-DD",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-    },
-    "contact_email": { "type": "string", "format": "email" },
-    "note": { "type": "string" }
-  }
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.13 POST /student/tuition-extend
+### 2.12 POST /student/tuition-extend
 
 Gia hạn học phí.
 
@@ -453,92 +397,7 @@ Gia hạn học phí.
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.14 POST /student/outpatient-regis
-
-Đăng ký ngoại trú.
-
-**Request JSON Schema:**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OutpatientRegisRequest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["address", "start_date", "landlord_name", "landlord_phone"],
-  "properties": {
-    "address": { "type": "string", "minLength": 1 },
-    "province": { "type": "string" },
-    "district": { "type": "string" },
-    "ward": { "type": "string" },
-    "start_date": {
-      "type": "string",
-      "description": "YYYY-MM-DD",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-    },
-    "end_date": {
-      "type": "string",
-      "description": "YYYY-MM-DD",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-    },
-    "landlord_name": { "type": "string", "minLength": 1 },
-    "landlord_phone": { "type": "string", "minLength": 6 },
-    "note": { "type": "string" },
-    "attachments": {
-      "type": "array",
-      "items": { "type": "string" },
-      "default": []
-    }
-  }
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.15 POST /student/eor-regis
-
-Đăng ký EOR.
-
-**Request JSON Schema:**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "EorRegisRequest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["year", "semester", "subject_code", "reason"],
-  "properties": {
-    "year": { "type": "integer", "minimum": 1900 },
-    "semester": { "type": "integer", "minimum": 1 },
-    "subject_code": { "type": "string", "minLength": 1 },
-    "subject_name": { "type": "string" },
-    "reason": { "type": "string", "minLength": 1 },
-    "contact_phone": { "type": "string", "minLength": 6 },
-    "attachments": {
-      "type": "array",
-      "items": { "type": "string" },
-      "default": []
-    }
-  }
-}
-```
-
-**Response (200 OK):**
-
-```json
-{ "message": "Successfully!", "data": {} }
-```
-
-**Response JSON Schema:** SuccessResponse
-
-### 2.16 POST /student/monthly-parking
+### 2.13 POST /student/monthly-parking
 
 Đăng ký gửi xe tháng.
 
@@ -577,7 +436,7 @@ Gia hạn học phí.
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.17 POST /student/graduate
+### 2.14 POST /student/graduate
 
 Đăng ký tốt nghiệp.
 
@@ -609,7 +468,7 @@ Gia hạn học phí.
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.18 POST /student/graduation-thesis
+### 2.15 POST /student/graduation-thesis
 
 Đăng ký khóa luận tốt nghiệp.
 
@@ -652,7 +511,7 @@ Gia hạn học phí.
 
 **Response JSON Schema:** SuccessResponse
 
-### 2.19 GET /rooms/availability
+### 2.16 GET /rooms/availability
 
 Tra cứu phòng trống.
 
@@ -670,7 +529,7 @@ Tra cứu phòng trống.
 
 ---
 
-### 2.20 POST /contact
+### 2.17 POST /contact
 
 Gửi liên hệ.
 
@@ -1037,6 +896,127 @@ Tạo yêu cầu **Giấy xác nhận sinh viên** (dịch vụ trực tuyến).
       "description": "Ngôn ngữ của giấy xác nhận"
     },
     "note": { "type": "string" }
+  }
+}
+```
+
+### 4.4 POST /student/language-certificate
+
+Đăng ký mới **Giấy xác nhận - Văn bằng - Chứng chỉ** (upload chứng chỉ ngoại ngữ).
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LanguageCertificateUploadRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "document_type",
+    "birth_date",
+    "id_number",
+    "listening_score",
+    "reading_score",
+    "total_score",
+    "exam_date",
+    "image_file"
+  ],
+  "properties": {
+    "document_type": {
+      "type": "string",
+      "enum": ["CONFIRMATION", "DIPLOMA", "CERTIFICATE"],
+      "description": "Loai giay: giay xac nhan / van bang / chung chi"
+    },
+    "birth_date": {
+      "type": "string",
+      "description": "Ngay sinh (YYYY-MM-DD)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "id_number": {
+      "type": "string",
+      "minLength": 6,
+      "description": "CMND/CCCD (giay to sinh vien dung khi dang ki du thi)"
+    },
+    "listening_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Diem nghe"
+    },
+    "reading_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Diem doc"
+    },
+    "total_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Tong diem"
+    },
+    "exam_date": {
+      "type": "string",
+      "description": "Ngay thi (YYYY-MM-DD)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "image_file": {
+      "type": "string",
+      "description": "File anh chung chi (jpg/png/gif/jpeg), base64"
+    }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Successfully!",
+  "data": {
+    "request_id": "uuid",
+    "status": "PENDING",
+    "created_at": "timestamp",
+    "pdf_url": null
+  }
+}
+```
+
+**Response JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LanguageCertificateUploadResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["message", "data"],
+  "properties": {
+    "message": { "type": "string" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "status", "created_at", "pdf_url"],
+      "properties": {
+        "request_id": { "type": "string", "description": "UUID" },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "PROCESSING", "READY", "REJECTED"],
+          "description": "Trang thai xu ly"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "description": "Unix timestamp (seconds hoac milliseconds)"
+            },
+            { "type": "string", "description": "ISO datetime" }
+          ]
+        },
+        "pdf_url": {
+          "anyOf": [{ "type": "string", "format": "uri" }, { "type": "null" }],
+          "description": "Link tai PDF (co the null neu chua san sang)"
+        }
+      }
+    }
   }
 }
 ```
