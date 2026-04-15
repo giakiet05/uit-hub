@@ -28,6 +28,13 @@ func NewNotFound(message string) *AppError {
 	return &AppError{Status: 404, Code: "NOT_FOUND", Message: message}
 }
 
+func NewInternal(message string) *AppError {
+	if message == "" {
+		message = "Internal error happened!"
+	}
+	return &AppError{Status: 500, Code: "INTERNAL_ERROR", Message: message}
+}
+
 type QueryYearSemester struct {
 	Year     int `json:"year"`
 	Semester int `json:"semester"`

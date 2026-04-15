@@ -1,11 +1,13 @@
 package usecase
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
-	"server/data"
 	"server/models"
 
 	"github.com/google/uuid"
@@ -18,10 +20,41 @@ const (
 
 type Service struct {
 	now func() time.Time
+
+	students      StudentRepo
+	courses       CourseRepo
+	enrollments   EnrollmentRepo
+	schedules     ScheduleRepo
+	examSchedules ExamScheduleRepo
+	scores        ScoreRepo
+	assignments   AssignmentRepo
+	materials     MaterialRepo
+	deadlines     DeadlineRepo
+	rooms         RoomRepo
+	roomBookings  RoomBookingRepo
+	submissions   SubmissionRepo
+	requests      RequestRepo
+	contacts      ContactRepo
 }
 
-func NewService() *Service {
-	return &Service{now: time.Now}
+func NewService(deps Deps) *Service {
+	return &Service{
+		now:           time.Now,
+		students:      deps.Students,
+		courses:       deps.Courses,
+		enrollments:   deps.Enrollments,
+		schedules:     deps.Schedules,
+		examSchedules: deps.ExamSchedules,
+		scores:        deps.Scores,
+		assignments:   deps.Assignments,
+		materials:     deps.Materials,
+		deadlines:     deps.Deadlines,
+		rooms:         deps.Rooms,
+		roomBookings:  deps.RoomBookings,
+		submissions:   deps.Submissions,
+		requests:      deps.Requests,
+		contacts:      deps.Contacts,
+	}
 }
 
 func success(data interface{}) SuccessResponse {
@@ -36,41 +69,117 @@ func isBlank(value string) bool {
 	return strings.TrimSpace(value) == ""
 }
 
+func isValidEmail(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	_, err := mail.ParseAddress(value)
+	return err == nil
+}
+
+func isValidURL(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	u, err := url.ParseRequestURI(value)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
+}
+
+func isValidBase64(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	if strings.HasPrefix(value, "data:") {
+		if idx := strings.Index(value, ","); idx >= 0 {
+			value = value[idx+1:]
+		}
+	}
+	_, err := base64.StdEncoding.DecodeString(value)
+	if err == nil {
+		return true
+	}
+	_, err = base64.RawStdEncoding.DecodeString(value)
+	return err == nil
+}
+
 func (s *Service) getStudent(studentID string) (*models.Student, *AppError) {
 	if studentID == "" {
-		if len(data.Students) == 0 {
-			return nil, NewNotFound("student not found")
-		}
-		return &data.Students[0], nil
+		return nil, NewUnauthorized("authorization required")
 	}
-
-	for i := range data.Students {
-		if data.Students[i].ID == studentID {
-			return &data.Students[i], nil
-		}
+	student, ok, err := s.students.FindByID(studentID)
+	if err != nil {
+		return nil, NewInternal("")
 	}
-
-	return nil, NewNotFound("student not found")
+	if !ok {
+		return nil, NewNotFound("student not found")
+	}
+	return student, nil
 }
 
 func (s *Service) Login(req LoginRequest) (SuccessResponse, *AppError) {
 	if isBlank(req.StudentID) || isBlank(req.Password) {
 		return SuccessResponse{}, NewBadRequest("student_id and password are required")
 	}
-
-	for i := range data.Students {
-		student := &data.Students[i]
-		if student.ID == req.StudentID {
-			if student.Password != req.Password {
-				return SuccessResponse{}, NewUnauthorized("invalid credentials")
-			}
-
-			token := "mock-" + student.ID
-			return success(map[string]string{"token": token}), nil
-		}
+	student, ok, err := s.students.FindByID(req.StudentID)
+	if err != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+	if !ok || student.Password != req.Password {
+		return SuccessResponse{}, NewUnauthorized("invalid credentials")
 	}
 
-	return SuccessResponse{}, NewUnauthorized("invalid credentials")
+	token := "mock-" + student.ID
+	return success(map[string]string{"token": token}), nil
+}
+
+func (s *Service) ListStudents() (SuccessResponse, *AppError) {
+	students, err := s.students.List()
+	if err != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+
+	result := make([]StudentProfile, 0, len(students))
+	for _, student := range students {
+		result = append(result, StudentProfile{
+			ID:    student.ID,
+			Name:  student.Name,
+			Email: student.Email,
+			Phone: student.Phone,
+			Major: student.Major,
+		})
+	}
+
+	return success(result), nil
+}
+
+func (s *Service) GetStudentByID(id string) (SuccessResponse, *AppError) {
+	if isBlank(id) {
+		return SuccessResponse{}, NewBadRequest("id is required")
+	}
+
+	student, ok, err := s.students.FindByID(id)
+	if err != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+	if !ok {
+		return SuccessResponse{}, NewNotFound("student not found")
+	}
+
+	profile := StudentProfile{
+		ID:    student.ID,
+		Name:  student.Name,
+		Email: student.Email,
+		Phone: student.Phone,
+		Major: student.Major,
+	}
+
+	return success(profile), nil
 }
 
 func (s *Service) GetProfile(studentID string) (SuccessResponse, *AppError) {
@@ -99,9 +208,13 @@ func (s *Service) GetSchedule(studentID string, query QueryYearSemester) (Succes
 	if err != nil {
 		return SuccessResponse{}, err
 	}
+	schedules, repoErr := s.schedules.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
 
 	result := make([]models.Schedule, 0)
-	for _, schedule := range data.Schedules {
+	for _, schedule := range schedules {
 		if schedule.StudentID == student.ID && schedule.Year == query.Year && schedule.Semester == query.Semester {
 			result = append(result, schedule)
 		}
@@ -119,9 +232,13 @@ func (s *Service) GetExamSchedule(studentID string, query QueryYearSemester) (Su
 	if err != nil {
 		return SuccessResponse{}, err
 	}
+	examSchedules, repoErr := s.examSchedules.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
 
 	result := make([]models.ExamSchedule, 0)
-	for _, schedule := range data.ExamSchedules {
+	for _, schedule := range examSchedules {
 		if schedule.StudentID == student.ID && schedule.Year == query.Year && schedule.Semester == query.Semester {
 			result = append(result, schedule)
 		}
@@ -135,9 +252,13 @@ func (s *Service) GetScore(studentID string) (SuccessResponse, *AppError) {
 	if err != nil {
 		return SuccessResponse{}, err
 	}
+	scores, repoErr := s.scores.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
 
 	result := make([]models.Score, 0)
-	for _, score := range data.Scores {
+	for _, score := range scores {
 		if score.StudentID == student.ID {
 			result = append(result, score)
 		}
@@ -151,14 +272,21 @@ func (s *Service) GetTuitionFee(studentID string) (SuccessResponse, *AppError) {
 	if err != nil {
 		return SuccessResponse{}, err
 	}
+	enrollments, repoErr := s.enrollments.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
 
 	credits := 0
-	for _, enrollment := range data.Enrollments {
+	for _, enrollment := range enrollments {
 		if enrollment.StudentID != student.ID {
 			continue
 		}
-		course := findCourse(enrollment.CourseID)
-		if course != nil {
+		course, ok, repoErr := s.courses.FindByID(enrollment.CourseID)
+		if repoErr != nil {
+			return SuccessResponse{}, NewInternal("")
+		}
+		if ok {
 			credits += course.Credits
 		}
 	}
@@ -193,18 +321,25 @@ func (s *Service) GetCourses(studentID string) (SuccessResponse, *AppError) {
 	if err != nil {
 		return SuccessResponse{}, err
 	}
+	enrollments, repoErr := s.enrollments.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
 
 	seen := make(map[string]bool)
 	result := make([]models.Course, 0)
-	for _, enrollment := range data.Enrollments {
+	for _, enrollment := range enrollments {
 		if enrollment.StudentID != student.ID {
 			continue
 		}
 		if seen[enrollment.CourseID] {
 			continue
 		}
-		course := findCourse(enrollment.CourseID)
-		if course != nil {
+		course, ok, repoErr := s.courses.FindByID(enrollment.CourseID)
+		if repoErr != nil {
+			return SuccessResponse{}, NewInternal("")
+		}
+		if ok {
 			seen[course.ID] = true
 			result = append(result, *course)
 		}
@@ -218,10 +353,14 @@ func (s *Service) GetTrainingPoints(studentID string) (SuccessResponse, *AppErro
 	if err != nil {
 		return SuccessResponse{}, err
 	}
+	scores, repoErr := s.scores.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
 
 	total := 0.0
 	count := 0
-	for _, score := range data.Scores {
+	for _, score := range scores {
 		if score.StudentID == student.ID {
 			total += score.Total
 			count++
@@ -286,6 +425,9 @@ func (s *Service) TranscriptRegis(studentID string, req TranscriptRegisRequest) 
 		if isBlank(req.ShippingAddress) || isBlank(req.Phone) {
 			return SuccessResponse{}, NewBadRequest("shipping_address and phone are required for delivery")
 		}
+		if len(strings.TrimSpace(req.Phone)) < 6 {
+			return SuccessResponse{}, NewBadRequest("phone is invalid")
+		}
 	}
 
 	if req.Language == "" {
@@ -296,8 +438,10 @@ func (s *Service) TranscriptRegis(studentID string, req TranscriptRegisRequest) 
 		return SuccessResponse{}, NewBadRequest("language is invalid")
 	}
 
-	created := s.createRequest(student.ID, "TRANSCRIPT_REGIS", req)
-	return success(created), nil
+	if _, appErr := s.createRequest(student.ID, "TRANSCRIPT_REGIS", req); appErr != nil {
+		return SuccessResponse{}, appErr
+	}
+	return success(nil), nil
 }
 
 func (s *Service) TuitionExtend(studentID string, req TuitionExtendRequest) (SuccessResponse, *AppError) {
@@ -316,8 +460,10 @@ func (s *Service) TuitionExtend(studentID string, req TuitionExtendRequest) (Suc
 		return SuccessResponse{}, NewBadRequest("requested_due_date is invalid")
 	}
 
-	created := s.createRequest(student.ID, "TUITION_EXTEND", req)
-	return success(created), nil
+	if _, appErr := s.createRequest(student.ID, "TUITION_EXTEND", req); appErr != nil {
+		return SuccessResponse{}, appErr
+	}
+	return success(nil), nil
 }
 
 func (s *Service) MonthlyParking(studentID string, req MonthlyParkingRequest) (SuccessResponse, *AppError) {
@@ -332,6 +478,9 @@ func (s *Service) MonthlyParking(studentID string, req MonthlyParkingRequest) (S
 	if req.Months > 12 {
 		return SuccessResponse{}, NewBadRequest("months must be between 1 and 12")
 	}
+	if len(strings.TrimSpace(req.PlateNumber)) < 3 {
+		return SuccessResponse{}, NewBadRequest("plate_number is invalid")
+	}
 	switch req.VehicleType {
 	case "MOTORBIKE", "CAR", "BICYCLE":
 	default:
@@ -341,8 +490,10 @@ func (s *Service) MonthlyParking(studentID string, req MonthlyParkingRequest) (S
 		return SuccessResponse{}, NewBadRequest("start_month is invalid")
 	}
 
-	created := s.createRequest(student.ID, "MONTHLY_PARKING", req)
-	return success(created), nil
+	if _, appErr := s.createRequest(student.ID, "MONTHLY_PARKING", req); appErr != nil {
+		return SuccessResponse{}, appErr
+	}
+	return success(nil), nil
 }
 
 func (s *Service) Graduate(studentID string, req GraduateRequest) (SuccessResponse, *AppError) {
@@ -357,9 +508,17 @@ func (s *Service) Graduate(studentID string, req GraduateRequest) (SuccessRespon
 	if isBlank(req.Email) || isBlank(req.Phone) {
 		return SuccessResponse{}, NewBadRequest("email and phone are required")
 	}
+	if !isValidEmail(req.Email) {
+		return SuccessResponse{}, NewBadRequest("email is invalid")
+	}
+	if len(strings.TrimSpace(req.Phone)) < 6 {
+		return SuccessResponse{}, NewBadRequest("phone is invalid")
+	}
 
-	created := s.createRequest(student.ID, "GRADUATE", req)
-	return success(created), nil
+	if _, appErr := s.createRequest(student.ID, "GRADUATE", req); appErr != nil {
+		return SuccessResponse{}, appErr
+	}
+	return success(nil), nil
 }
 
 func (s *Service) GraduationThesis(studentID string, req GraduationThesisRequest) (SuccessResponse, *AppError) {
@@ -379,9 +538,14 @@ func (s *Service) GraduationThesis(studentID string, req GraduationThesisRequest
 			return SuccessResponse{}, NewBadRequest("team_members.student_id is required")
 		}
 	}
+	if !isBlank(req.AdvisorEmail) && !isValidEmail(req.AdvisorEmail) {
+		return SuccessResponse{}, NewBadRequest("advisor_email is invalid")
+	}
 
-	created := s.createRequest(student.ID, "GRADUATION_THESIS", req)
-	return success(created), nil
+	if _, appErr := s.createRequest(student.ID, "GRADUATION_THESIS", req); appErr != nil {
+		return SuccessResponse{}, appErr
+	}
+	return success(nil), nil
 }
 
 func (s *Service) GetDeadlines(studentID string) (SuccessResponse, *AppError) {
@@ -389,9 +553,13 @@ func (s *Service) GetDeadlines(studentID string) (SuccessResponse, *AppError) {
 	if err != nil {
 		return SuccessResponse{}, err
 	}
+	deadlines, repoErr := s.deadlines.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
 
 	result := make([]models.Deadline, 0)
-	for _, deadline := range data.Deadlines {
+	for _, deadline := range deadlines {
 		if deadline.StudentID == student.ID {
 			result = append(result, deadline)
 		}
@@ -405,12 +573,20 @@ func (s *Service) GetMaterials(studentID, courseID string) (SuccessResponse, *Ap
 	if err != nil {
 		return SuccessResponse{}, err
 	}
-	if findCourse(courseID) == nil {
+	_, ok, repoErr := s.courses.FindByID(courseID)
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+	if !ok {
 		return SuccessResponse{}, NewNotFound("course not found")
+	}
+	materials, repoErr := s.materials.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
 	}
 
 	result := make([]models.Material, 0)
-	for _, material := range data.Materials {
+	for _, material := range materials {
 		if material.CourseID == courseID {
 			result = append(result, material)
 		}
@@ -424,12 +600,20 @@ func (s *Service) GetAssignments(studentID, courseID string) (SuccessResponse, *
 	if err != nil {
 		return SuccessResponse{}, err
 	}
-	if findCourse(courseID) == nil {
+	_, ok, repoErr := s.courses.FindByID(courseID)
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+	if !ok {
 		return SuccessResponse{}, NewNotFound("course not found")
+	}
+	assignments, repoErr := s.assignments.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
 	}
 
 	result := make([]models.Assignment, 0)
-	for _, assignment := range data.Assignments {
+	for _, assignment := range assignments {
 		if assignment.CourseID == courseID {
 			result = append(result, assignment)
 		}
@@ -443,9 +627,11 @@ func (s *Service) SubmitAssignment(studentID, assignmentID string, req Assignmen
 	if err != nil {
 		return SuccessResponse{}, err
 	}
-
-	assignment := findAssignment(assignmentID)
-	if assignment == nil {
+	assignment, ok, repoErr := s.assignments.FindByID(assignmentID)
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+	if !ok {
 		return SuccessResponse{}, NewNotFound("assignment not found")
 	}
 
@@ -465,6 +651,9 @@ func (s *Service) SubmitAssignment(studentID, assignmentID string, req Assignmen
 		if isBlank(req.URL) {
 			return SuccessResponse{}, NewBadRequest("url is required for LINK submissions")
 		}
+		if !isValidURL(req.URL) {
+			return SuccessResponse{}, NewBadRequest("url is invalid")
+		}
 		content = req.URL
 	case "FILE":
 		if len(req.FileURLs) == 0 {
@@ -474,19 +663,23 @@ func (s *Service) SubmitAssignment(studentID, assignmentID string, req Assignmen
 	default:
 		return SuccessResponse{}, NewBadRequest("submission_type is invalid")
 	}
-
-	submissionID := uuid.NewString()
-	data.Submissions = append(data.Submissions, models.Submission{
-		ID:             uint(len(data.Submissions) + 1),
+	_ = uuid.NewString()
+	count, repoErr := s.submissions.Count()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+	if err := s.submissions.Create(models.Submission{
+		ID:             uint(count + 1),
 		AssignmentID:   assignment.ID,
 		StudentID:      student.ID,
 		SubmissionType: submissionType,
 		Content:        content,
 		CreatedAt:      s.now().Format(time.RFC3339),
-	})
+	}); err != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
 
-	response := SubmissionResponse{SubmissionID: submissionID, Status: "SUBMITTED"}
-	return success(response), nil
+	return success(nil), nil
 }
 
 func (s *Service) ConfirmLetter(studentID string, req ConfirmLetterRequest) (SuccessResponse, *AppError) {
@@ -515,8 +708,20 @@ func (s *Service) ConfirmLetter(studentID string, req ConfirmLetterRequest) (Suc
 	if req.Reason == "OTHER" && isBlank(req.OtherReason) {
 		return SuccessResponse{}, NewBadRequest("other_reason is required when reason is OTHER")
 	}
+	if req.Reason == "OTHER" {
+		if !strings.HasPrefix(strings.TrimSpace(req.OtherReason), "Bổ sung hồ sơ") {
+			return SuccessResponse{}, NewBadRequest("other_reason is invalid")
+		}
+	} else {
+		if !isBlank(req.OtherReason) {
+			return SuccessResponse{}, NewBadRequest("other_reason is not allowed")
+		}
+	}
 
-	created := s.createRequest(student.ID, "CONFIRM_LETTER", req)
+	created, appErr := s.createRequest(student.ID, "CONFIRM_LETTER", req)
+	if appErr != nil {
+		return SuccessResponse{}, appErr
+	}
 	return success(created), nil
 }
 
@@ -544,7 +749,10 @@ func (s *Service) BankLoans(studentID string, req BankLoansRequest) (SuccessResp
 		return SuccessResponse{}, NewBadRequest("template is invalid")
 	}
 
-	created := s.createRequest(student.ID, "BANK_LOANS", req)
+	created, appErr := s.createRequest(student.ID, "BANK_LOANS", req)
+	if appErr != nil {
+		return SuccessResponse{}, appErr
+	}
 	return success(created), nil
 }
 
@@ -562,7 +770,10 @@ func (s *Service) TrainingPointConfirm(studentID string, req TrainingPointConfir
 		return SuccessResponse{}, NewBadRequest("language is invalid")
 	}
 
-	created := s.createRequest(student.ID, "TRAINING_POINT_CONFIRM", req)
+	created, appErr := s.createRequest(student.ID, "TRAINING_POINT_CONFIRM", req)
+	if appErr != nil {
+		return SuccessResponse{}, appErr
+	}
 	return success(created), nil
 }
 
@@ -573,6 +784,12 @@ func (s *Service) LanguageCertificate(studentID string, req LanguageCertificateU
 	}
 	if isBlank(req.DocumentType) || isBlank(req.BirthDate) || isBlank(req.IDNumber) || isBlank(req.ExamDate) || isBlank(req.ImageFile) {
 		return SuccessResponse{}, NewBadRequest("document_type, birth_date, id_number, exam_date, image_file are required")
+	}
+	if len(strings.TrimSpace(req.IDNumber)) < 6 {
+		return SuccessResponse{}, NewBadRequest("id_number is invalid")
+	}
+	if !isValidBase64(req.ImageFile) {
+		return SuccessResponse{}, NewBadRequest("image_file is invalid")
 	}
 	switch req.DocumentType {
 	case "CONFIRMATION", "DIPLOMA", "CERTIFICATE":
@@ -589,7 +806,10 @@ func (s *Service) LanguageCertificate(studentID string, req LanguageCertificateU
 		return SuccessResponse{}, NewBadRequest("scores must be greater than or equal to 0")
 	}
 
-	created := s.createRequest(student.ID, "LANGUAGE_CERTIFICATE", req)
+	created, appErr := s.createRequest(student.ID, "LANGUAGE_CERTIFICATE", req)
+	if appErr != nil {
+		return SuccessResponse{}, appErr
+	}
 	return success(created), nil
 }
 
@@ -614,8 +834,16 @@ func (s *Service) GetRoomsAvailability(query QueryRoomsAvailability) (SuccessRes
 	}
 
 	available := make([]RoomItem, 0)
-	for _, room := range data.Rooms {
-		if isRoomAvailable(room.ID, query.Date, startMin, endMin) {
+	rooms, repoErr := s.rooms.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+	bookings, repoErr := s.roomBookings.List()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+	for _, room := range rooms {
+		if isRoomAvailable(room.ID, query.Date, startMin, endMin, bookings) {
 			available = append(available, RoomItem{ID: room.ID, Name: room.Name, Capacity: room.Capacity})
 		}
 	}
@@ -628,59 +856,53 @@ func (s *Service) Contact(req ContactRequest) (SuccessResponse, *AppError) {
 	if isBlank(req.Name) || isBlank(req.Email) || isBlank(req.Subject) || isBlank(req.Message) {
 		return SuccessResponse{}, NewBadRequest("name, email, subject, message are required")
 	}
+	if !isValidEmail(req.Email) {
+		return SuccessResponse{}, NewBadRequest("email is invalid")
+	}
 
-	contactID := uuid.NewString()
-	data.Contacts = append(data.Contacts, models.Contact{
-		ID:        uint(len(data.Contacts) + 1),
+	_ = uuid.NewString()
+	count, repoErr := s.contacts.Count()
+	if repoErr != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
+	if err := s.contacts.Create(models.Contact{
+		ID:        uint(count + 1),
 		Name:      req.Name,
 		Email:     req.Email,
 		Phone:     req.Phone,
 		Subject:   req.Subject,
 		Message:   req.Message,
 		CreatedAt: s.now().Format(time.RFC3339),
-	})
+	}); err != nil {
+		return SuccessResponse{}, NewInternal("")
+	}
 
-	return success(map[string]string{"contact_id": contactID}), nil
+	return success(nil), nil
 }
 
-func (s *Service) createRequest(studentID, requestType string, payload interface{}) RequestStatusData {
+func (s *Service) createRequest(studentID, requestType string, payload interface{}) (RequestStatusData, *AppError) {
 	requestID := uuid.NewString()
-	payloadBytes, _ := json.Marshal(payload)
-	data.Requests = append(data.Requests, models.Request{
+	payloadBytes, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		return RequestStatusData{}, NewInternal("")
+	}
+	if err := s.requests.Create(models.Request{
 		ID:        requestID,
 		StudentID: studentID,
 		Type:      requestType,
 		Status:    "PENDING",
 		Payload:   string(payloadBytes),
 		CreatedAt: s.now().Format(time.RFC3339),
-	})
+	}); err != nil {
+		return RequestStatusData{}, NewInternal("")
+	}
 
 	return RequestStatusData{
 		RequestID: requestID,
 		Status:    "PENDING",
 		CreatedAt: s.now().Unix(),
 		PDFURL:    nil,
-	}
-}
-
-func findCourse(courseID string) *models.Course {
-	for i := range data.Courses {
-		if data.Courses[i].ID == courseID {
-			return &data.Courses[i]
-		}
-	}
-
-	return nil
-}
-
-func findAssignment(assignmentID string) *models.Assignment {
-	for i := range data.Assignments {
-		if data.Assignments[i].ID == assignmentID {
-			return &data.Assignments[i]
-		}
-	}
-
-	return nil
+	}, nil
 }
 
 func parseTimeToMinutes(value string) (int, error) {
@@ -692,8 +914,8 @@ func parseTimeToMinutes(value string) (int, error) {
 	return parsed.Hour()*60 + parsed.Minute(), nil
 }
 
-func isRoomAvailable(roomID uint, date string, startMin, endMin int) bool {
-	for _, booking := range data.RoomBookings {
+func isRoomAvailable(roomID uint, date string, startMin, endMin int, bookings []models.RoomBooking) bool {
+	for _, booking := range bookings {
 		if booking.RoomID != roomID || booking.Date != date {
 			continue
 		}

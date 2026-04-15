@@ -1,6 +1,10 @@
 package routes
 
 import (
+	"log"
+	"os"
+
+	"server/data"
 	"server/handlers"
 	"server/usecase"
 
@@ -8,14 +12,42 @@ import (
 )
 
 func SetupRoutes(app *fiber.App) {
-	api := app.Group("/api")
-	api.Get("/students", handlers.GetStudents)
-	api.Get("/students/:id", handlers.GetStudentByID)
+	scenario := os.Getenv("SEED")
+	fixture, err := data.LoadFixture(scenario)
+	if err != nil {
+		log.Fatalf("load fixture: %v", err)
+	}
+	store := data.NewStoreFromFixture(*fixture)
+	repos := data.NewRepos(store)
 
-	uc := usecase.NewService()
-	h := handlers.NewHandler(uc)
+	deps := usecase.Deps{
+		Students:      repos.Students,
+		Courses:       repos.Courses,
+		Enrollments:   repos.Enrollments,
+		Schedules:     repos.Schedules,
+		ExamSchedules: repos.ExamSchedules,
+		Scores:        repos.Scores,
+		Assignments:   repos.Assignments,
+		Materials:     repos.Materials,
+		Deadlines:     repos.Deadlines,
+		Rooms:         repos.Rooms,
+		RoomBookings:  repos.RoomBookings,
+		Submissions:   repos.Submissions,
+		Requests:      repos.Requests,
+		Contacts:      repos.Contacts,
+	}
+
+	uc := usecase.NewService(deps)
+	h := handlers.NewHandler(uc, store.Reset)
+
+	api := app.Group("/api")
+	api.Get("/students", h.GetStudents)
+	api.Get("/students/:id", h.GetStudentByID)
 
 	app.Post("/login", h.Login)
+
+	admin := app.Group("/admin")
+	admin.Post("/reset", h.ResetStore)
 
 	student := app.Group("/student")
 	student.Get("/profile", h.GetProfile)

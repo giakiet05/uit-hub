@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"os"
 	"strings"
 
 	"server/usecase"
@@ -9,11 +10,12 @@ import (
 )
 
 type Handler struct {
-	uc *usecase.Service
+	uc    *usecase.Service
+	reset func()
 }
 
-func NewHandler(uc *usecase.Service) *Handler {
-	return &Handler{uc: uc}
+func NewHandler(uc *usecase.Service, reset func()) *Handler {
+	return &Handler{uc: uc, reset: reset}
 }
 
 func (h *Handler) respond(c *fiber.Ctx, resp usecase.SuccessResponse, err *usecase.AppError) error {
@@ -32,6 +34,14 @@ func (h *Handler) parseBody(c *fiber.Ctx, out interface{}) *usecase.AppError {
 		return usecase.NewBadRequest("invalid json body")
 	}
 	return nil
+}
+
+func (h *Handler) requireAuth(c *fiber.Ctx) (string, *usecase.AppError) {
+	studentID := getStudentID(c)
+	if studentID == "" {
+		return "", usecase.NewUnauthorized("authorization required")
+	}
+	return studentID, nil
 }
 
 func getStudentID(c *fiber.Ctx) string {
@@ -55,6 +65,26 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 
 	resp, appErr := h.uc.Login(req)
 	return h.respond(c, resp, appErr)
+}
+
+func (h *Handler) ResetStore(c *fiber.Ctx) error {
+	if h.reset == nil {
+		return h.respond(c, usecase.SuccessResponse{}, usecase.NewInternal("reset is not configured"))
+	}
+
+	adminToken := strings.TrimSpace(os.Getenv("ADMIN_TOKEN"))
+	if adminToken != "" {
+		provided := strings.TrimSpace(c.Get("X-Admin-Token"))
+		if provided == "" {
+			return h.respond(c, usecase.SuccessResponse{}, usecase.NewUnauthorized("admin token required"))
+		}
+		if provided != adminToken {
+			return h.respond(c, usecase.SuccessResponse{}, usecase.NewUnauthorized("invalid admin token"))
+		}
+	}
+
+	h.reset()
+	return h.respond(c, usecase.SuccessResponse{Message: "Successfully!", Data: map[string]interface{}{}}, nil)
 }
 
 func (h *Handler) GetProfile(c *fiber.Ctx) error {
@@ -223,12 +253,18 @@ func (h *Handler) LanguageCertificate(c *fiber.Ctx) error {
 }
 
 func (h *Handler) GetRoomsAvailability(c *fiber.Ctx) error {
+	if _, err := h.requireAuth(c); err != nil {
+		return h.respond(c, usecase.SuccessResponse{}, err)
+	}
 	query := usecase.QueryRoomsAvailability{Date: c.Query("date"), Start: c.Query("start"), End: c.Query("end")}
 	resp, appErr := h.uc.GetRoomsAvailability(query)
 	return h.respond(c, resp, appErr)
 }
 
 func (h *Handler) Contact(c *fiber.Ctx) error {
+	if _, err := h.requireAuth(c); err != nil {
+		return h.respond(c, usecase.SuccessResponse{}, err)
+	}
 	var req usecase.ContactRequest
 	if err := h.parseBody(c, &req); err != nil {
 		return h.respond(c, usecase.SuccessResponse{}, err)

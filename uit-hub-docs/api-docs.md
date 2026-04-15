@@ -186,7 +186,7 @@
 **Response (200 OK):**
 
 ```json
-{ "message": "Successfully!", "data": {} }
+{ "message": "Successfully!", "data": { "token": "mock-<student_id>" } }
 ```
 
 **Response JSON Schema:** SuccessResponse
@@ -900,86 +900,6 @@ Tạo yêu cầu **Giấy xác nhận sinh viên** (dịch vụ trực tuyến).
 }
 ```
 
-### 4.4 POST /student/language-certificate
-
-Đăng ký mới **Giấy xác nhận - Văn bằng - Chứng chỉ** (upload chứng chỉ ngoại ngữ).
-
-**Request JSON Schema:**
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "LanguageCertificateUploadRequest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "document_type",
-    "birth_date",
-    "id_number",
-    "listening_score",
-    "reading_score",
-    "total_score",
-    "exam_date",
-    "image_file"
-  ],
-  "properties": {
-    "document_type": {
-      "type": "string",
-      "enum": ["CONFIRMATION", "DIPLOMA", "CERTIFICATE"],
-      "description": "Loai giay: giay xac nhan / van bang / chung chi"
-    },
-    "birth_date": {
-      "type": "string",
-      "description": "Ngay sinh (YYYY-MM-DD)",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-    },
-    "id_number": {
-      "type": "string",
-      "minLength": 6,
-      "description": "CMND/CCCD (giay to sinh vien dung khi dang ki du thi)"
-    },
-    "listening_score": {
-      "type": "number",
-      "minimum": 0,
-      "description": "Diem nghe"
-    },
-    "reading_score": {
-      "type": "number",
-      "minimum": 0,
-      "description": "Diem doc"
-    },
-    "total_score": {
-      "type": "number",
-      "minimum": 0,
-      "description": "Tong diem"
-    },
-    "exam_date": {
-      "type": "string",
-      "description": "Ngay thi (YYYY-MM-DD)",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
-    },
-    "image_file": {
-      "type": "string",
-      "description": "File anh chung chi (jpg/png/gif/jpeg), base64"
-    }
-  }
-}
-```
-
-**Response (200 OK):**
-
-```json
-{
-  "message": "Successfully!",
-  "data": {
-    "request_id": "uuid",
-    "status": "PENDING",
-    "created_at": "timestamp",
-    "pdf_url": null
-  }
-}
-```
-
 **Response JSON Schema:**
 
 ```json
@@ -1072,6 +992,86 @@ Tạo yêu cầu **Giấy xác nhận sinh viên** (dịch vụ trực tuyến).
         }
       }
     }
+  }
+}
+```
+
+### 4.4 POST /student/language-certificate
+
+Đăng ký mới **Giấy xác nhận - Văn bằng - Chứng chỉ** (upload chứng chỉ ngoại ngữ).
+
+**Request JSON Schema:**
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LanguageCertificateUploadRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "document_type",
+    "birth_date",
+    "id_number",
+    "listening_score",
+    "reading_score",
+    "total_score",
+    "exam_date",
+    "image_file"
+  ],
+  "properties": {
+    "document_type": {
+      "type": "string",
+      "enum": ["CONFIRMATION", "DIPLOMA", "CERTIFICATE"],
+      "description": "Loai giay: giay xac nhan / van bang / chung chi"
+    },
+    "birth_date": {
+      "type": "string",
+      "description": "Ngay sinh (YYYY-MM-DD)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "id_number": {
+      "type": "string",
+      "minLength": 6,
+      "description": "CMND/CCCD (giay to sinh vien dung khi dang ki du thi)"
+    },
+    "listening_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Diem nghe"
+    },
+    "reading_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Diem doc"
+    },
+    "total_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Tong diem"
+    },
+    "exam_date": {
+      "type": "string",
+      "description": "Ngay thi (YYYY-MM-DD)",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "image_file": {
+      "type": "string",
+      "description": "File anh chung chi (jpg/png/gif/jpeg), base64"
+    }
+  }
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "message": "Successfully!",
+  "data": {
+    "request_id": "uuid",
+    "status": "PENDING",
+    "created_at": "timestamp",
+    "pdf_url": null
   }
 }
 ```
