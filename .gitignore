@@ -1,8 +1,24 @@
 .claude
 .gemini
 .codex
+.agents
+.gitnexus
 .vscode
 .idea
 .obsidian
+.env
 .env.*
+!.env.example
+.agents
+.gitnexus
 
+
+# Go
+bin/
+tmp/
+*.test
+coverage.out
+
+# Local build artifacts
+apps/fake-uit-server/server
+ 
