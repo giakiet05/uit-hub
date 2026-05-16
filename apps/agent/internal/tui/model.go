@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -27,9 +28,10 @@ type model struct {
 	logs             *LogBuffer
 	width            int
 	height           int
-	input            string
+	input            textinput.Model
 	running          bool
 	initialRun       bool
+	mouseEnabled     bool
 	conversation     []string
 	conversationView viewport.Model
 	logLines         []string
@@ -54,14 +56,22 @@ func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.
 	logView := viewport.New(1, 1)
 	logView.MouseWheelDelta = mouseScrollLines
 	logView.Style = paneStyle
+	input := textinput.New()
+	input.Prompt = "> "
+	input.PromptStyle = inputPromptStyle
+	input.TextStyle = inputTextStyle
+	input.Cursor.Style = inputCursorStyle
+	input.SetValue(initialPrompt)
+	input.Focus()
 
 	return model{
 		ctx:              ctx,
 		session:          session,
 		agent:            runtimeAgent,
 		logs:             logs,
-		input:            initialPrompt,
+		input:            input,
 		initialRun:       initialPrompt != "",
+		mouseEnabled:     true,
 		conversation:     []string{},
 		conversationView: conversationView,
 		logLines:         []string{},
@@ -71,9 +81,9 @@ func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.
 
 func (m model) Init() tea.Cmd {
 	if m.initialRun {
-		return tea.Batch(tickLogs(m.logs), submitPrompt(m.input))
+		return tea.Batch(tickLogs(m.logs), textinput.Blink, submitPrompt(m.input.Value()))
 	}
-	return tickLogs(m.logs)
+	return tea.Batch(tickLogs(m.logs), textinput.Blink)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -86,6 +96,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.updateKey(typed)
 	case tea.MouseMsg:
+		if !m.mouseEnabled {
+			return m, nil
+		}
 		return m.updateMouse(typed)
 	case agentResultMsg:
 		m.running = false
@@ -106,7 +119,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case submitPromptMsg:
 		return m.submitPrompt(typed.prompt)
 	default:
-		return m, nil
+		var cmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
+		return m, cmd
 	}
 }
 
@@ -114,16 +129,16 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc":
 		return m, tea.Quit
-	case "enter":
-		return m.submitPrompt(m.input)
-	case "backspace":
-		if m.input != "" {
-			runes := []rune(m.input)
-			m.input = string(runes[:len(runes)-1])
+	case "ctrl+y":
+		m.mouseEnabled = !m.mouseEnabled
+		if m.mouseEnabled {
+			return m, tea.EnableMouseCellMotion
 		}
-		return m, nil
+		return m, tea.DisableMouse
+	case "enter":
+		return m.submitPrompt(m.input.Value())
 	case "q":
-		if m.input == "" && !m.running {
+		if m.input.Value() == "" && !m.running {
 			return m, tea.Quit
 		}
 	case "pgup":
@@ -144,10 +159,13 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if len(msg.Runes) > 0 && !m.running {
-		m.input += string(msg.Runes)
+	if m.running {
+		return m, nil
 	}
-	return m, nil
+
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return m, cmd
 }
 
 func (m model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
@@ -180,7 +198,7 @@ func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 	if prompt == "" || m.running {
 		return m, nil
 	}
-	m.input = ""
+	m.input.SetValue("")
 	m.initialRun = false
 	m.running = true
 	m.err = nil
@@ -207,10 +225,13 @@ func (m model) renderInput() string {
 		status = " running"
 	}
 	if m.err != nil {
-		status = " error"
+		status += " error"
+	}
+	if !m.mouseEnabled {
+		status = " copy-mode"
 	}
 
-	text := "> " + m.input
+	text := m.input.View()
 	if m.running {
 		text = "> waiting for assistant..."
 	}
@@ -234,6 +255,11 @@ func (m *model) resizeViewports() {
 	leftWidth := m.width / 2
 	rightWidth := m.width - leftWidth
 
+	inputWidth := m.width - inputStyle.GetHorizontalFrameSize()
+	if inputWidth < 1 {
+		inputWidth = 1
+	}
+	m.input.Width = inputWidth
 	m.conversationView.Width = leftWidth
 	m.conversationView.Height = mainHeight
 	m.logView.Width = rightWidth
@@ -243,7 +269,7 @@ func (m *model) resizeViewports() {
 }
 
 func (m *model) syncConversation(gotoBottom bool) {
-	lines := append([]string{"Conversation", ""}, m.conversation...)
+	lines := append([]string{titleStyle.Render("Conversation"), ""}, m.conversation...)
 	m.conversationView.SetContent(paneContent(lines, m.conversationView.Width))
 	if gotoBottom || m.conversationView.PastBottom() {
 		m.conversationView.GotoBottom()
@@ -251,7 +277,7 @@ func (m *model) syncConversation(gotoBottom bool) {
 }
 
 func (m *model) syncLogs(gotoBottom bool) {
-	lines := append([]string{"Logs", ""}, m.logLines...)
+	lines := append([]string{titleStyle.Render("Logs"), ""}, colorLogLines(m.logLines)...)
 	m.logView.SetContent(paneContent(lines, m.logView.Width))
 	if gotoBottom || m.logView.PastBottom() {
 		m.logView.GotoBottom()
@@ -277,6 +303,80 @@ func paneContent(lines []string, width int) string {
 		wrapped = append(wrapped, strings.Split(ansi.Wrap(line, width, ""), "\n")...)
 	}
 	return strings.Join(wrapped, "\n")
+}
+
+func colorLogLines(lines []string) []string {
+	colored := make([]string, 0, len(lines))
+	for _, line := range lines {
+		colored = append(colored, colorLogLine(line))
+	}
+	return colored
+}
+
+func colorLogLine(line string) string {
+	fields := splitLogFields(line)
+	if len(fields) == 0 {
+		return line
+	}
+
+	colored := make([]string, 0, len(fields))
+	for _, field := range fields {
+		key, value, ok := strings.Cut(field, "=")
+		if !ok || key == "" {
+			colored = append(colored, field)
+			continue
+		}
+		colored = append(colored, logKeyStyle.Render(key)+logEqualsStyle.Render("=")+logValueStyle(key, value).Render(value))
+	}
+	return strings.Join(colored, " ")
+}
+
+func splitLogFields(line string) []string {
+	fields := []string{}
+	var builder strings.Builder
+	inQuote := false
+
+	for _, r := range line {
+		switch r {
+		case '"':
+			inQuote = !inQuote
+			builder.WriteRune(r)
+		case ' ':
+			if inQuote {
+				builder.WriteRune(r)
+				continue
+			}
+			if builder.Len() > 0 {
+				fields = append(fields, builder.String())
+				builder.Reset()
+			}
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	if builder.Len() > 0 {
+		fields = append(fields, builder.String())
+	}
+	return fields
+}
+
+func logValueStyle(key string, value string) lipgloss.Style {
+	if key != "level" {
+		return logValueStyleDefault
+	}
+
+	switch strings.Trim(value, `"`) {
+	case "DEBUG":
+		return logDebugStyle
+	case "INFO":
+		return logInfoStyle
+	case "WARN":
+		return logWarnStyle
+	case "ERROR":
+		return logErrorStyle
+	default:
+		return logValueStyleDefault
+	}
 }
 
 func runAgent(ctx context.Context, runtimeAgent agent.Agent, session *runtime.Session, prompt string) tea.Cmd {
@@ -305,3 +405,37 @@ var paneStyle = lipgloss.NewStyle().
 var inputStyle = lipgloss.NewStyle().
 	Border(lipgloss.NormalBorder()).
 	Padding(0, 1)
+
+var inputPromptStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("250"))
+
+var inputTextStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("250"))
+
+var inputCursorStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("212"))
+
+var titleStyle = lipgloss.NewStyle().
+	Bold(true).
+	Foreground(lipgloss.Color("39"))
+
+var logKeyStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("75"))
+
+var logEqualsStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("244"))
+
+var logValueStyleDefault = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("250"))
+
+var logDebugStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("244"))
+
+var logInfoStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("82"))
+
+var logWarnStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("214"))
+
+var logErrorStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("203"))
