@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 	openaisdk "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
@@ -71,14 +73,8 @@ func (p *Provider) Generate(ctx context.Context, request llm.GenerateRequest) (l
 		return llm.GenerateResponse{}, err
 	}
 
-	finishReason := llm.FinishReasonStop
-	if len(message.ToolCalls) > 0 {
-		finishReason = llm.FinishReasonToolCall
-	}
-
 	return llm.GenerateResponse{
-		Message:      message,
-		FinishReason: finishReason,
+		Message: message,
 		Usage: llm.Usage{
 			InputTokens:  int(response.Usage.InputTokens),
 			OutputTokens: int(response.Usage.OutputTokens),
@@ -86,29 +82,37 @@ func (p *Provider) Generate(ctx context.Context, request llm.GenerateRequest) (l
 	}, nil
 }
 
-func toResponsesInput(messages []llm.Message) []responses.ResponseInputItemUnionParam {
+func toResponsesInput(messages []conversation.Message) []responses.ResponseInputItemUnionParam {
 	input := make([]responses.ResponseInputItemUnionParam, 0, len(messages))
 	for _, message := range messages {
-		if message.Role == llm.RoleTool {
-			input = append(input, responses.ResponseInputItemParamOfFunctionCallOutput(message.ToolCallID, message.ContentText()))
-			continue
-		}
-
-		if message.ContentText() != "" {
-			input = append(input, responses.ResponseInputItemParamOfMessage(message.ContentText(), toResponsesRole(message.Role)))
-		}
-		for _, call := range message.ToolCalls {
-			arguments, err := json.Marshal(call.Arguments)
-			if err != nil {
-				arguments = []byte("{}")
+		switch typed := message.(type) {
+		case conversation.SystemMessage, conversation.UserMessage:
+			if text := conversation.Text(message); text != "" {
+				input = append(input, responses.ResponseInputItemParamOfMessage(text, toResponsesRole(conversation.RoleOf(message))))
 			}
-			input = append(input, responses.ResponseInputItemParamOfFunctionCall(string(arguments), call.ID, call.Name))
+		case conversation.AssistantMessage:
+			if text := conversation.Text(typed); text != "" {
+				input = append(input, responses.ResponseInputItemParamOfMessage(text, responses.EasyInputMessageRoleAssistant))
+			}
+			for _, call := range typed.ToolCalls {
+				input = append(input, toResponsesFunctionCall(call))
+			}
+		case conversation.ToolResultMessage:
+			input = append(input, responses.ResponseInputItemParamOfFunctionCallOutput(typed.ToolCallID, conversation.Text(typed)))
 		}
 	}
 	return input
 }
 
-func toResponsesTools(tools []llm.ToolDefinition) []responses.ToolUnionParam {
+func toResponsesFunctionCall(call conversation.ToolCall) responses.ResponseInputItemUnionParam {
+	arguments, err := json.Marshal(call.Arguments)
+	if err != nil {
+		arguments = []byte("{}")
+	}
+	return responses.ResponseInputItemParamOfFunctionCall(string(arguments), call.ID, call.Name)
+}
+
+func toResponsesTools(tools []tool.Definition) []responses.ToolUnionParam {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -127,8 +131,8 @@ func toResponsesTools(tools []llm.ToolDefinition) []responses.ToolUnionParam {
 	return params
 }
 
-func toLLMMessage(outputText string, output []responses.ResponseOutputItemUnion) (llm.Message, error) {
-	message := llm.NewTextMessage(llm.RoleAssistant, outputText)
+func toLLMMessage(outputText string, output []responses.ResponseOutputItemUnion) (conversation.AssistantMessage, error) {
+	toolCalls := []conversation.ToolCall{}
 	for _, item := range output {
 		functionCall, ok := item.AsAny().(responses.ResponseFunctionToolCall)
 		if !ok {
@@ -138,26 +142,26 @@ func toLLMMessage(outputText string, output []responses.ResponseOutputItemUnion)
 		arguments := map[string]any{}
 		if functionCall.Arguments != "" {
 			if err := json.Unmarshal([]byte(functionCall.Arguments), &arguments); err != nil {
-				return llm.Message{}, err
+				return conversation.AssistantMessage{}, err
 			}
 		}
 
-		message.ToolCalls = append(message.ToolCalls, llm.ToolCall{
+		toolCalls = append(toolCalls, conversation.ToolCall{
 			ID:        functionCall.CallID,
 			Name:      functionCall.Name,
 			Arguments: arguments,
 		})
 	}
-	return message, nil
+	return conversation.NewAssistantMessage(outputText, toolCalls), nil
 }
 
-func toResponsesRole(role llm.Role) responses.EasyInputMessageRole {
+func toResponsesRole(role conversation.Role) responses.EasyInputMessageRole {
 	switch role {
-	case llm.RoleSystem:
+	case conversation.RoleSystem:
 		return responses.EasyInputMessageRoleSystem
-	case llm.RoleAssistant:
+	case conversation.RoleAssistant:
 		return responses.EasyInputMessageRoleAssistant
-	case llm.RoleUser:
+	case conversation.RoleUser:
 		return responses.EasyInputMessageRoleUser
 	default:
 		return responses.EasyInputMessageRoleUser

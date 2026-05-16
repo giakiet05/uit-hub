@@ -3,7 +3,6 @@ package localtool
 import (
 	"context"
 
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
@@ -13,8 +12,8 @@ func NewEcho() *Echo {
 	return &Echo{}
 }
 
-func (t *Echo) Definition() llm.ToolDefinition {
-	return llm.ToolDefinition{
+func (t *Echo) Definition() tool.Definition {
+	return tool.Definition{
 		Name:        "echo",
 		Description: "Return the provided text exactly as received.",
 		InputSchema: map[string]any{

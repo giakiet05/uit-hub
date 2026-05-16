@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -11,7 +13,13 @@ import (
 type Config struct {
 	SystemPrompt string
 	Provider     string
+	Agent        AgentConfig
 	OpenAI       OpenAIConfig
+}
+
+type AgentConfig struct {
+	MaxRounds   int
+	ToolTimeout time.Duration
 }
 
 type OpenAIConfig struct {
@@ -28,6 +36,10 @@ func Load() (Config, error) {
 	cfg := Config{
 		SystemPrompt: "You are a helpful agent.",
 		Provider:     envOrDefault("LLM_PROVIDER", "openai"),
+		Agent: AgentConfig{
+			MaxRounds:   envIntOrDefault("AGENT_MAX_ROUNDS", 0),
+			ToolTimeout: envDurationOrDefault("AGENT_TOOL_TIMEOUT", 15*time.Second),
+		},
 		OpenAI: OpenAIConfig{
 			APIKey:  strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
 			Model:   envOrDefault("OPENAI_MODEL", "gpt-4.1-mini"),
@@ -55,4 +67,30 @@ func envOrDefault(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func envIntOrDefault(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envDurationOrDefault(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := time.ParseDuration(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

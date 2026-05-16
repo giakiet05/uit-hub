@@ -3,6 +3,7 @@ package echo
 import (
 	"context"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 )
 
@@ -19,15 +20,14 @@ func (p *Provider) Generate(ctx context.Context, request llm.GenerateRequest) (l
 
 	userText := lastUserText(request.Messages)
 	return llm.GenerateResponse{
-		Message:      llm.NewTextMessage(llm.RoleAssistant, "received: "+userText),
-		FinishReason: llm.FinishReasonStop,
+		Message: conversation.NewAssistantMessage("received: "+userText, nil),
 	}, nil
 }
 
-func lastUserText(messages []llm.Message) string {
+func lastUserText(messages []conversation.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == llm.RoleUser {
-			return messages[i].ContentText()
+		if _, ok := messages[i].(conversation.UserMessage); ok {
+			return conversation.Text(messages[i])
 		}
 	}
 	return ""

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/cli"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm/echo"
@@ -17,11 +17,15 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/tui"
 )
 
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+	logBuffer := tui.NewLogBuffer(500)
+	initialPrompt := strings.TrimSpace(strings.Join(args, " "))
+
 	err := config.LoadEnv()
-	logger := logging.NewLogger(stderr)
+	logger := logging.NewLogger(logBuffer)
 	if err != nil {
 		logger.DebugContext(ctx, "No .env file loaded", "error", err)
 	} else {
@@ -33,7 +37,15 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		logger.DebugContext(ctx, "Agent config load failed", "error", err)
 		return err
 	}
-	logger.DebugContext(ctx, "Agent config loaded", "llm_provider", cfg.Provider, "openai_model", cfg.OpenAI.Model, "openai_base_url", cfg.OpenAI.BaseURL)
+	logger.DebugContext(
+		ctx,
+		"Agent config loaded",
+		"llm_provider", cfg.Provider,
+		"openai_model", cfg.OpenAI.Model,
+		"openai_base_url", cfg.OpenAI.BaseURL,
+		"agent_max_rounds", cfg.Agent.MaxRounds,
+		"agent_tool_timeout", cfg.Agent.ToolTimeout.String(),
+	)
 	logger.DebugContext(ctx, "Starting agent app", "llm_provider", cfg.Provider)
 
 	provider, err := newProvider(cfg, logger)
@@ -50,14 +62,21 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	}
 	logger.DebugContext(ctx, "Tool registry initialized", "tool_count", len(tools.Definitions()))
 
-	loop := agent.NewLoop(provider, prompts, logger, tools)
-	runner := cli.NewRunner(session, loop, stdin, stdout, stderr, logger)
+	runtimeAgent := agent.NewReActAgent(agent.ReActConfig{
+		Provider:    provider,
+		Prompts:     prompts,
+		Tools:       tools,
+		Logger:      logger,
+		MaxRounds:   cfg.Agent.MaxRounds,
+		ToolTimeout: cfg.Agent.ToolTimeout,
+	})
 
-	if err := runner.Run(ctx, args); err != nil {
-		logger.DebugContext(ctx, "Agent app stopped with error", "error", err)
+	runner := tui.NewRunner(session, runtimeAgent, stdin, stdout, logBuffer, initialPrompt)
+	if err := runner.Run(ctx); err != nil {
+		logger.DebugContext(ctx, "Agent TUI stopped with error", "error", err)
 		return err
 	}
-	logger.DebugContext(ctx, "Agent app stopped")
+	logger.DebugContext(ctx, "Agent TUI stopped")
 	return nil
 }
 

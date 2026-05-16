@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
@@ -15,8 +14,8 @@ func NewCalculator() *Calculator {
 	return &Calculator{}
 }
 
-func (t *Calculator) Definition() llm.ToolDefinition {
-	return llm.ToolDefinition{
+func (t *Calculator) Definition() tool.Definition {
+	return tool.Definition{
 		Name:        "calculator",
 		Description: "Run a basic arithmetic operation on two numbers.",
 		InputSchema: map[string]any{

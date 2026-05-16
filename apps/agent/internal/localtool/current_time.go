@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
@@ -21,8 +20,8 @@ func NewCurrentTimeWithClock(now func() time.Time) *CurrentTime {
 	return &CurrentTime{now: now}
 }
 
-func (t *CurrentTime) Definition() llm.ToolDefinition {
-	return llm.ToolDefinition{
+func (t *CurrentTime) Definition() tool.Definition {
+	return tool.Definition{
 		Name:        "current_time",
 		Description: "Return the current time in RFC3339 format for a timezone.",
 		InputSchema: map[string]any{

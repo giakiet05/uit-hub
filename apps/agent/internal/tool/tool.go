@@ -1,14 +1,16 @@
 package tool
 
-import (
-	"context"
-
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
-)
+import "context"
 
 type Tool interface {
-	Definition() llm.ToolDefinition
+	Definition() Definition
 	Execute(ctx context.Context, call Call) (Result, error)
+}
+
+type Definition struct {
+	Name        string
+	Description string
+	InputSchema map[string]any
 }
 
 type Call struct {

@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 )
 
 func TestToResponsesInputMapsMessages(t *testing.T) {
-	input := toResponsesInput([]llm.Message{
-		llm.NewTextMessage(llm.RoleSystem, "system prompt"),
-		llm.NewTextMessage(llm.RoleUser, "hello"),
+	input := toResponsesInput([]conversation.Message{
+		conversation.NewSystemMessage("system prompt"),
+		conversation.NewUserMessage("hello"),
 	})
 
 	if len(input) != 2 {
@@ -34,12 +34,12 @@ func TestToResponsesInputMapsMessages(t *testing.T) {
 func TestToResponsesRole(t *testing.T) {
 	tests := []struct {
 		name string
-		role llm.Role
+		role conversation.Role
 		want string
 	}{
-		{name: "system", role: llm.RoleSystem, want: "system"},
-		{name: "assistant", role: llm.RoleAssistant, want: "assistant"},
-		{name: "user", role: llm.RoleUser, want: "user"},
+		{name: "system", role: conversation.RoleSystem, want: "system"},
+		{name: "assistant", role: conversation.RoleAssistant, want: "assistant"},
+		{name: "user", role: conversation.RoleUser, want: "user"},
 	}
 
 	for _, tt := range tests {

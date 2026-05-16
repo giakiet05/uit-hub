@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 )
 
 var ErrNotFound = errors.New("tool not found")
@@ -48,12 +46,12 @@ func (r *Registry) Register(candidate Tool) error {
 	return nil
 }
 
-func (r *Registry) Definitions() []llm.ToolDefinition {
+func (r *Registry) Definitions() []Definition {
 	if r == nil {
 		return nil
 	}
 
-	definitions := make([]llm.ToolDefinition, 0, len(r.order))
+	definitions := make([]Definition, 0, len(r.order))
 	for _, name := range r.order {
 		definitions = append(definitions, r.tools[name].Definition())
 	}
