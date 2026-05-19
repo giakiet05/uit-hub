@@ -39,15 +39,19 @@ type model struct {
 	err              error
 }
 
+// agentResultMsg carries the completed agent response back into the TUI update
+// loop.
 type agentResultMsg struct {
 	text string
 	err  error
 }
 
+// logRefreshMsg carries the latest log snapshot into the TUI update loop.
 type logRefreshMsg struct {
 	lines []string
 }
 
+// newModel creates the Bubble Tea model and initializes viewports and input.
 func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.Agent, logs *LogBuffer, initialPrompt string) model {
 	initialPrompt = strings.TrimSpace(initialPrompt)
 	conversationView := viewport.New(1, 1)
@@ -71,7 +75,7 @@ func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.
 		logs:             logs,
 		input:            input,
 		initialRun:       initialPrompt != "",
-		mouseEnabled:     true,
+		mouseEnabled:     false,
 		conversation:     []string{},
 		conversationView: conversationView,
 		logLines:         []string{},
@@ -79,6 +83,7 @@ func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.
 	}
 }
 
+// Init starts periodic log refresh and the text-input cursor blink.
 func (m model) Init() tea.Cmd {
 	if m.initialRun {
 		return tea.Batch(tickLogs(m.logs), textinput.Blink, submitPrompt(m.input.Value()))
@@ -86,6 +91,7 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(tickLogs(m.logs), textinput.Blink)
 }
 
+// Update handles Bubble Tea messages and returns the next model state.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch typed := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -125,6 +131,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+// updateKey handles keyboard shortcuts and prompt editing.
 func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "esc":
@@ -168,6 +175,7 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// updateMouse routes mouse wheel events to the pane under the cursor.
 func (m model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if msg.Y >= m.mainHeight() {
 		return m, nil
@@ -183,16 +191,19 @@ func (m model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// submitPromptMsg asks the update loop to submit a prompt after initialization.
 type submitPromptMsg struct {
 	prompt string
 }
 
+// submitPrompt creates a command that submits a prompt on the next update tick.
 func submitPrompt(prompt string) tea.Cmd {
 	return func() tea.Msg {
 		return submitPromptMsg{prompt: prompt}
 	}
 }
 
+// submitPrompt appends a user message to the pane and starts the agent run.
 func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 	prompt := strings.TrimSpace(input)
 	if prompt == "" || m.running {
@@ -207,6 +218,7 @@ func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 	return m, runAgent(m.ctx, m.agent, m.session, prompt)
 }
 
+// View renders the full TUI frame.
 func (m model) View() string {
 	if m.width == 0 || m.height == 0 {
 		return "loading..."
@@ -219,6 +231,7 @@ func (m model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, main, m.renderInput())
 }
 
+// renderInput renders the bottom prompt box and transient status text.
 func (m model) renderInput() string {
 	status := ""
 	if m.running {
@@ -227,8 +240,8 @@ func (m model) renderInput() string {
 	if m.err != nil {
 		status += " error"
 	}
-	if !m.mouseEnabled {
-		status = " copy-mode"
+	if m.mouseEnabled {
+		status += " mouse-scroll"
 	}
 
 	text := m.input.View()
@@ -242,6 +255,7 @@ func (m model) renderInput() string {
 	return inputStyle.Width(contentWidth).Height(inputHeight - 2).Render(text + status)
 }
 
+// mainHeight returns the height available to the conversation and log panes.
 func (m model) mainHeight() int {
 	mainHeight := m.height - inputHeight
 	if mainHeight < 1 {
@@ -250,6 +264,7 @@ func (m model) mainHeight() int {
 	return mainHeight
 }
 
+// resizeViewports recalculates pane sizes after a terminal resize.
 func (m *model) resizeViewports() {
 	mainHeight := m.mainHeight()
 	leftWidth := m.width / 2
@@ -268,6 +283,7 @@ func (m *model) resizeViewports() {
 	m.syncLogs(false)
 }
 
+// syncConversation refreshes the conversation viewport content.
 func (m *model) syncConversation(gotoBottom bool) {
 	lines := append([]string{titleStyle.Render("Conversation"), ""}, m.conversation...)
 	m.conversationView.SetContent(paneContent(lines, m.conversationView.Width))
@@ -276,6 +292,7 @@ func (m *model) syncConversation(gotoBottom bool) {
 	}
 }
 
+// syncLogs refreshes the log viewport content.
 func (m *model) syncLogs(gotoBottom bool) {
 	lines := append([]string{titleStyle.Render("Logs"), ""}, colorLogLines(m.logLines)...)
 	m.logView.SetContent(paneContent(lines, m.logView.Width))
@@ -284,6 +301,7 @@ func (m *model) syncLogs(gotoBottom bool) {
 	}
 }
 
+// paneContentWidth returns the usable text width inside a bordered pane.
 func paneContentWidth(width int) int {
 	contentWidth := width - paneStyle.GetHorizontalFrameSize()
 	if contentWidth < 1 {
@@ -292,6 +310,7 @@ func paneContentWidth(width int) int {
 	return contentWidth
 }
 
+// paneContent wraps pane lines to the current viewport width.
 func paneContent(lines []string, width int) string {
 	width = paneContentWidth(width)
 	wrapped := make([]string, 0, len(lines))
@@ -305,6 +324,7 @@ func paneContent(lines []string, width int) string {
 	return strings.Join(wrapped, "\n")
 }
 
+// colorLogLines applies syntax coloring to structured slog text lines.
 func colorLogLines(lines []string) []string {
 	colored := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -313,6 +333,7 @@ func colorLogLines(lines []string) []string {
 	return colored
 }
 
+// colorLogLine colors key=value fields in one structured log line.
 func colorLogLine(line string) string {
 	fields := splitLogFields(line)
 	if len(fields) == 0 {
@@ -331,6 +352,7 @@ func colorLogLine(line string) string {
 	return strings.Join(colored, " ")
 }
 
+// splitLogFields splits a slog text line while preserving quoted values.
 func splitLogFields(line string) []string {
 	fields := []string{}
 	var builder strings.Builder
@@ -360,7 +382,11 @@ func splitLogFields(line string) []string {
 	return fields
 }
 
+// logValueStyle chooses a color style for a log value based on its key.
 func logValueStyle(key string, value string) lipgloss.Style {
+	if key == "msg" {
+		return logMessageStyle
+	}
 	if key != "level" {
 		return logValueStyleDefault
 	}
@@ -379,6 +405,7 @@ func logValueStyle(key string, value string) lipgloss.Style {
 	}
 }
 
+// runAgent starts an agent run as a Bubble Tea command.
 func runAgent(ctx context.Context, runtimeAgent agent.Agent, session *runtime.Session, prompt string) tea.Cmd {
 	return func() tea.Msg {
 		message, err := runtimeAgent.Run(ctx, session, prompt)
@@ -389,6 +416,7 @@ func runAgent(ctx context.Context, runtimeAgent agent.Agent, session *runtime.Se
 	}
 }
 
+// tickLogs schedules the next periodic log-buffer snapshot.
 func tickLogs(logs *LogBuffer) tea.Cmd {
 	return tea.Tick(logTick, func(time.Time) tea.Msg {
 		if logs == nil {
@@ -427,6 +455,9 @@ var logEqualsStyle = lipgloss.NewStyle().
 
 var logValueStyleDefault = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("250"))
+
+var logMessageStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("229"))
 
 var logDebugStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("244"))

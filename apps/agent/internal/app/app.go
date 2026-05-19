@@ -1,3 +1,4 @@
+// Package app wires configuration, providers, tools, sessions, and the TUI.
 package app
 
 import (
@@ -10,7 +11,6 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm/echo"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm/openai"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/localtool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
@@ -20,6 +20,7 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tui"
 )
 
+// Run starts the agent application in TUI mode.
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
 	logBuffer := tui.NewLogBuffer(500)
 	initialPrompt := strings.TrimSpace(strings.Join(args, " "))
@@ -54,7 +55,9 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	}
 
 	session := runtime.NewSession()
-	prompts := prompt.NewBuilder(cfg.SystemPrompt)
+	prompts := prompt.NewBuilder(prompt.SystemPrompt{
+		SessionText: cfg.SystemPrompt,
+	})
 	tools, err := newToolRegistry()
 	if err != nil {
 		logger.DebugContext(ctx, "Tool registry initialization failed", "error", err)
@@ -80,14 +83,20 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	return nil
 }
 
+// newToolRegistry registers the temporary local tools used by the current
+// baseline agent.
 func newToolRegistry() (*tool.Registry, error) {
 	return tool.NewRegistry(
 		localtool.NewEcho(),
 		localtool.NewCalculator(),
 		localtool.NewCurrentTime(),
+		localtool.NewWriteFile("tmp/agent-files"),
+		localtool.NewKnowledgeLookup(),
+		localtool.NewStudentProfileLookup(),
 	)
 }
 
+// newProvider selects the configured LLM provider.
 func newProvider(cfg config.Config, logger *slog.Logger) (llm.Provider, error) {
 	switch cfg.Provider {
 	case "openai":
@@ -97,9 +106,6 @@ func newProvider(cfg config.Config, logger *slog.Logger) (llm.Provider, error) {
 			Model:   cfg.OpenAI.Model,
 			BaseURL: cfg.OpenAI.BaseURL,
 		}, logger), nil
-	case "echo":
-		logger.Debug("Initializing echo LLM provider")
-		return echo.NewProvider(), nil
 	default:
 		logger.Debug("Unsupported LLM provider requested", "llm_provider", cfg.Provider)
 		return nil, errors.New("unsupported LLM_PROVIDER: " + cfg.Provider)

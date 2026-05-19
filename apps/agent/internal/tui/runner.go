@@ -1,3 +1,4 @@
+// Package tui provides the terminal UI for interactive agent sessions.
 package tui
 
 import (
@@ -9,6 +10,7 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
 )
 
+// Runner owns the Bubble Tea program setup for the agent TUI.
 type Runner struct {
 	session       *runtime.Session
 	agent         agent.Agent
@@ -18,6 +20,7 @@ type Runner struct {
 	initialPrompt string
 }
 
+// NewRunner creates a TUI runner for one session.
 func NewRunner(session *runtime.Session, runtimeAgent agent.Agent, stdin io.Reader, stdout io.Writer, logs *LogBuffer, initialPrompt string) *Runner {
 	return &Runner{
 		session:       session,
@@ -29,6 +32,7 @@ func NewRunner(session *runtime.Session, runtimeAgent agent.Agent, stdin io.Read
 	}
 }
 
+// Run starts the Bubble Tea event loop.
 func (r *Runner) Run(ctx context.Context) error {
 	model := newModel(ctx, r.session, r.agent, r.logs, r.initialPrompt)
 	program := tea.NewProgram(
@@ -37,7 +41,6 @@ func (r *Runner) Run(ctx context.Context) error {
 		tea.WithInput(r.stdin),
 		tea.WithOutput(r.stdout),
 		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
 	)
 	_, err := program.Run()
 	return err

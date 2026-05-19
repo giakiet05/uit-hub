@@ -1,3 +1,5 @@
+// Package localtool contains temporary native tools used to exercise the agent
+// loop before MCP adapters are introduced.
 package localtool
 
 import (
@@ -6,12 +8,15 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
+// Echo returns text exactly as provided by the model.
 type Echo struct{}
 
+// NewEcho creates an echo tool.
 func NewEcho() *Echo {
 	return &Echo{}
 }
 
+// Definition describes the echo tool schema.
 func (t *Echo) Definition() tool.Definition {
 	return tool.Definition{
 		Name:        "echo",
@@ -30,6 +35,7 @@ func (t *Echo) Definition() tool.Definition {
 	}
 }
 
+// Execute validates the text argument and returns it unchanged.
 func (t *Echo) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {
 	if err := ctx.Err(); err != nil {
 		return tool.Result{}, err

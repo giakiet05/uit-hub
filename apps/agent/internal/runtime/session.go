@@ -1,3 +1,4 @@
+// Package runtime owns per-run runtime objects such as sessions.
 package runtime
 
 import (
@@ -10,12 +11,14 @@ import (
 
 var sessionCounter atomic.Uint64
 
+// Session groups one conversation history with a stable runtime identifier.
 type Session struct {
 	ID           string
 	StartedAt    time.Time
 	Conversation conversation.Conversation
 }
 
+// NewSession creates a session with a monotonic process-local ID.
 func NewSession() *Session {
 	id := sessionCounter.Add(1)
 	return &Session{

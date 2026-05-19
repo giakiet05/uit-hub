@@ -1,3 +1,4 @@
+// Package logging configures slog loggers for the agent runtime.
 package logging
 
 import (
@@ -7,6 +8,7 @@ import (
 	"strings"
 )
 
+// NewLogger creates a text slog logger whose level is controlled by LOG_LEVEL.
 func NewLogger(output io.Writer) *slog.Logger {
 	logLevel := slog.LevelInfo
 
@@ -30,6 +32,7 @@ func NewLogger(output io.Writer) *slog.Logger {
 	return logger
 }
 
+// NewNopLogger creates a logger that discards all records.
 func NewNopLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }

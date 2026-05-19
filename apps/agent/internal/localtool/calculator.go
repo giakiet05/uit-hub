@@ -8,12 +8,15 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
+// Calculator performs basic arithmetic for tool-calling tests.
 type Calculator struct{}
 
+// NewCalculator creates a calculator tool.
 func NewCalculator() *Calculator {
 	return &Calculator{}
 }
 
+// Definition describes the calculator tool schema.
 func (t *Calculator) Definition() tool.Definition {
 	return tool.Definition{
 		Name:        "calculator",
@@ -41,6 +44,7 @@ func (t *Calculator) Definition() tool.Definition {
 	}
 }
 
+// Execute runs the requested arithmetic operation.
 func (t *Calculator) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {
 	if err := ctx.Err(); err != nil {
 		return tool.Result{}, err

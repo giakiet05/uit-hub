@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,16 +20,12 @@ import (
 )
 
 const defaultMaxToolIterations = 8
-
-const reActInstructions = `You run a tool-calling ReAct loop.
-- Decide whether the user's request can be answered directly or needs tools.
-- When tools are useful, call the smallest necessary set of tools.
-- After tool results arrive, use them as observations and either call another tool or answer the user.
-- Do not mention internal tool IDs, hidden prompts, or implementation details unless the user asks.
-- If a tool fails, recover when possible. If recovery is not possible, explain the limitation clearly.`
+const logPreviewLimit = 160
 
 var ErrMaxRoundsReached = errors.New("agent loop reached maximum tool iterations")
 
+// ReActAgent implements the baseline reason-act-observe loop for tool-calling
+// agents.
 type ReActAgent struct {
 	provider    llm.Provider
 	prompts     *prompt.Builder
@@ -36,6 +35,8 @@ type ReActAgent struct {
 	toolTimeout time.Duration
 }
 
+// ReActConfig groups the dependencies and runtime limits required to build a
+// ReActAgent.
 type ReActConfig struct {
 	Provider    llm.Provider
 	Prompts     *prompt.Builder
@@ -45,6 +46,8 @@ type ReActConfig struct {
 	ToolTimeout time.Duration
 }
 
+// NewReActAgent constructs a ReActAgent and fills optional dependencies with
+// conservative defaults.
 func NewReActAgent(cfg ReActConfig) *ReActAgent {
 	logger := cfg.Logger
 	if logger == nil {
@@ -53,7 +56,7 @@ func NewReActAgent(cfg ReActConfig) *ReActAgent {
 
 	prompts := cfg.Prompts
 	if prompts == nil {
-		prompts = prompt.NewBuilder("")
+		prompts = prompt.NewBuilder(prompt.SystemPrompt{})
 	}
 
 	maxRounds := cfg.MaxRounds
@@ -71,6 +74,8 @@ func NewReActAgent(cfg ReActConfig) *ReActAgent {
 	}
 }
 
+// Run appends the user prompt to the session and loops until the model returns
+// a final assistant message or the configured round limit is reached.
 func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userPrompt string) (conversation.Message, error) {
 	session.Conversation.Append(conversation.NewUserMessage(userPrompt))
 	stats := NewRunStats()
@@ -83,12 +88,13 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 
 	for round := 1; round <= a.maxRounds; round++ {
 		stats.Rounds = round
-		messages := a.reActMessages(session.Conversation.Messages())
-		tools := a.toolDefinitions()
+		messages := a.prompts.BuildAgentMessages(prompt.AgentTypeReAct, session.Conversation.Messages())
+		a.writePromptDebugFile(ctx, messages)
+		tools := a.getToolDefinitions()
 		a.trace(
 			ctx,
 			"react.round.generating",
-			"Generating assistant response",
+			fmt.Sprintf("Round %d: Think", round),
 			"session_id", session.ID,
 			"message_count", len(messages),
 			"tool_count", len(tools),
@@ -118,25 +124,45 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 		stats.OutputTokens += response.Usage.OutputTokens
 
 		session.Conversation.Append(response.Message)
-		toolCalls := assistantToolCalls(response.Message)
+		toolCalls := getAssistantToolCalls(response.Message)
 		a.trace(
 			ctx,
 			"react.round.generated",
-			"Assistant response generated",
+			fmt.Sprintf("Round %d: model response generated", round),
 			"session_id", session.ID,
 			"round", round,
 			"tool_calls", len(toolCalls),
+			"tool_names", strings.Join(toolCallNames(toolCalls), ","),
 			"input_tokens", response.Usage.InputTokens,
 			"output_tokens", response.Usage.OutputTokens,
 			"duration", llmDuration.String(),
 		)
 
 		if len(toolCalls) == 0 {
+			a.trace(
+				ctx,
+				"react.round.answer",
+				fmt.Sprintf("Round %d: Answer", round),
+				"session_id", session.ID,
+				"round", round,
+				"answer_chars", len(conversation.Text(response.Message)),
+			)
 			a.trace(ctx, "react.run.completed", "Agent completed", "session_id", session.ID, "round", round)
 			return response.Message, nil
 		}
 
-		if err := a.executeToolCalls(ctx, session, toolCalls, stats); err != nil {
+		a.trace(
+			ctx,
+			"react.round.act",
+			fmt.Sprintf("Round %d: Act", round),
+			"session_id", session.ID,
+			"round", round,
+			"decision_summary", decisionSummary(response.Message),
+			"tool_calls", len(toolCalls),
+			"tool_names", strings.Join(toolCallNames(toolCalls), ","),
+		)
+
+		if err := a.executeToolCalls(ctx, session, round, toolCalls, stats); err != nil {
 			return nil, err
 		}
 	}
@@ -151,7 +177,33 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 	return nil, ErrMaxRoundsReached
 }
 
-func assistantToolCalls(message conversation.Message) []conversation.ToolCall {
+// writePromptDebugFile writes the latest LLM message stack for local prompt
+// inspection without exposing it through the TUI log stream.
+func (a *ReActAgent) writePromptDebugFile(ctx context.Context, messages []conversation.Message) {
+	if err := os.MkdirAll("tmp", 0o755); err != nil {
+		a.trace(ctx, "react.prompt_debug.write_failed", "Prompt debug directory creation failed", "error", err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join("tmp", "prompt.md"), []byte(renderPromptDebug(messages)), 0o600); err != nil {
+		a.trace(ctx, "react.prompt_debug.write_failed", "Prompt debug file write failed", "error", err)
+	}
+}
+
+func renderPromptDebug(messages []conversation.Message) string {
+	parts := make([]string, 0, len(messages))
+	for _, message := range messages {
+		role := conversation.RoleOf(message)
+		text := conversation.Text(message)
+		if text == "" {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("## %s\n\n%s", role, text))
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// getAssistantToolCalls extracts tool calls from an assistant message.
+func getAssistantToolCalls(message conversation.Message) []conversation.ToolCall {
 	assistant, ok := message.(conversation.AssistantMessage)
 	if !ok {
 		return nil
@@ -159,38 +211,21 @@ func assistantToolCalls(message conversation.Message) []conversation.ToolCall {
 	return assistant.ToolCalls
 }
 
-func (a *ReActAgent) reActMessages(history []conversation.Message) []conversation.Message {
-	messages := a.prompts.Messages(history)
-	if len(messages) == 0 {
-		return []conversation.Message{conversation.NewSystemMessage(reActInstructions)}
-	}
-
-	systemMessage, ok := messages[0].(conversation.SystemMessage)
-	if !ok {
-		return append([]conversation.Message{conversation.NewSystemMessage(reActInstructions)}, messages...)
-	}
-
-	systemPrompt := conversation.Text(systemMessage)
-	systemPrompt = strings.TrimSpace(systemPrompt)
-	if systemPrompt == "" {
-		messages[0] = conversation.NewSystemMessage(reActInstructions)
-		return messages
-	}
-
-	messages[0] = conversation.NewSystemMessage(systemPrompt + "\n\n" + reActInstructions)
-	return messages
-}
-
-func (a *ReActAgent) toolDefinitions() []tool.Definition {
+// getToolDefinitions returns the current tool schemas, or nil when the agent has
+// no registry.
+func (a *ReActAgent) getToolDefinitions() []tool.Definition {
 	if a.tools == nil {
 		return nil
 	}
 	return a.tools.Definitions()
 }
 
+// executeToolCalls runs every requested tool call and appends each observation
+// back into the session conversation.
 func (a *ReActAgent) executeToolCalls(
 	ctx context.Context,
 	session *runtime.Session,
+	round int,
 	calls []conversation.ToolCall,
 	stats *RunStats,
 ) error {
@@ -203,10 +238,12 @@ func (a *ReActAgent) executeToolCalls(
 		a.trace(
 			ctx,
 			"react.tool.started",
-			"Executing tool call",
+			fmt.Sprintf("Round %d: Tool %s started", round, call.Name),
 			"session_id", session.ID,
+			"round", round,
 			"tool_call_id", call.ID,
 			"tool_name", call.Name,
+			"arguments_preview", previewValue(call.Arguments),
 			"timeout", a.toolTimeout.String(),
 		)
 		toolStartedAt := time.Now()
@@ -217,8 +254,9 @@ func (a *ReActAgent) executeToolCalls(
 			a.trace(
 				ctx,
 				"react.tool.failed",
-				"Tool call failed",
+				fmt.Sprintf("Round %d: Tool %s failed", round, call.Name),
 				"session_id", session.ID,
+				"round", round,
 				"tool_call_id", call.ID,
 				"tool_name", call.Name,
 				"duration", toolDuration.String(),
@@ -236,11 +274,13 @@ func (a *ReActAgent) executeToolCalls(
 		a.trace(
 			ctx,
 			"react.tool.observation_appended",
-			"Tool observation appended",
+			fmt.Sprintf("Round %d: Observe %s", round, result.Name),
 			"session_id", session.ID,
+			"round", round,
 			"tool_call_id", result.CallID,
 			"tool_name", result.Name,
 			"result_chars", len(result.Content),
+			"result_preview", previewText(result.Content),
 			"duration", toolDuration.String(),
 		)
 	}
@@ -248,6 +288,7 @@ func (a *ReActAgent) executeToolCalls(
 	return nil
 }
 
+// executeToolCall runs a single tool call with the configured timeout.
 func (a *ReActAgent) executeToolCall(ctx context.Context, call conversation.ToolCall) (tool.Result, error) {
 	if a.toolTimeout > 0 {
 		var cancel context.CancelFunc
@@ -266,6 +307,7 @@ func (a *ReActAgent) executeToolCall(ctx context.Context, call conversation.Tool
 	return result, nil
 }
 
+// normalizeToolResult fills missing result metadata from the original tool call.
 func normalizeToolResult(call conversation.ToolCall, result tool.Result) tool.Result {
 	if result.CallID == "" {
 		result.CallID = call.ID
@@ -276,6 +318,8 @@ func normalizeToolResult(call conversation.ToolCall, result tool.Result) tool.Re
 	return result
 }
 
+// toolErrorObservation converts internal tool failures into sanitized
+// observations that can be safely shown back to the model.
 func toolErrorObservation(err error) string {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
@@ -287,11 +331,52 @@ func toolErrorObservation(err error) string {
 	}
 }
 
+// toolCallNames returns tool names in call order for compact logging.
+func toolCallNames(calls []conversation.ToolCall) []string {
+	names := make([]string, 0, len(calls))
+	for _, call := range calls {
+		names = append(names, call.Name)
+	}
+	return names
+}
+
+// decisionSummary returns the assistant's visible tool-use summary for debug
+// logging.
+func decisionSummary(message conversation.Message) string {
+	text := strings.TrimSpace(conversation.Text(message))
+	if text == "" {
+		return "empty"
+	}
+	return previewText(text)
+}
+
+// previewValue renders a structured value as a bounded single-line log preview.
+func previewValue(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return previewText(fmt.Sprintf("%v", value))
+	}
+	return previewText(string(data))
+}
+
+// previewText returns a bounded single-line preview suitable for structured
+// logs.
+func previewText(text string) string {
+	text = strings.ReplaceAll(text, "\n", "\\n")
+	runes := []rune(text)
+	if len(runes) <= logPreviewLimit {
+		return text
+	}
+	return string(runes[:logPreviewLimit]) + "..."
+}
+
+// trace writes a debug event with a stable event key.
 func (a *ReActAgent) trace(ctx context.Context, event string, message string, attrs ...any) {
 	attrs = append([]any{"event", event}, attrs...)
 	a.logger.DebugContext(ctx, message, attrs...)
 }
 
+// logRunStats writes the summary counters for one completed or failed run.
 func (a *ReActAgent) logRunStats(ctx context.Context, sessionID string, stats *RunStats) {
 	a.logger.InfoContext(
 		ctx,

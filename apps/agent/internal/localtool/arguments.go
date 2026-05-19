@@ -2,6 +2,7 @@ package localtool
 
 import "fmt"
 
+// stringArg reads a required string argument from a tool call.
 func stringArg(arguments map[string]any, name string) (string, error) {
 	value, exists := arguments[name]
 	if !exists {
@@ -15,6 +16,7 @@ func stringArg(arguments map[string]any, name string) (string, error) {
 	return text, nil
 }
 
+// numberArg reads a required numeric argument from a tool call.
 func numberArg(arguments map[string]any, name string) (float64, error) {
 	value, exists := arguments[name]
 	if !exists {

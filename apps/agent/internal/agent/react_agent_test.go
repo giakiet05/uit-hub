@@ -12,7 +12,6 @@ import (
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm/echo"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/localtool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
@@ -22,8 +21,8 @@ import (
 
 func TestReActAgentRunsProvider(t *testing.T) {
 	agent := NewReActAgent(ReActConfig{
-		Provider: echo.NewProvider(),
-		Prompts:  prompt.NewBuilder("system"),
+		Provider: echoTestProvider{},
+		Prompts:  newTestPromptBuilder(),
 		Logger:   logging.NewNopLogger(),
 	})
 	session := runtime.NewSession()
@@ -38,6 +37,33 @@ func TestReActAgentRunsProvider(t *testing.T) {
 	}
 }
 
+func TestReActAgentSendsSystemPromptWithoutStoringItInConversation(t *testing.T) {
+	provider := &captureMessagesProvider{}
+	agent := NewReActAgent(ReActConfig{
+		Provider: provider,
+		Prompts:  newTestPromptBuilder(),
+		Logger:   logging.NewNopLogger(),
+	})
+	session := runtime.NewSession()
+
+	_, err := agent.Run(context.Background(), session, "xin chao")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if len(provider.messages) == 0 {
+		t.Fatal("provider received no messages")
+	}
+	if _, ok := provider.messages[0].(conversation.SystemMessage); !ok {
+		t.Fatalf("first provider message type = %T, want conversation.SystemMessage", provider.messages[0])
+	}
+	for _, message := range session.Conversation.Messages() {
+		if _, ok := message.(conversation.SystemMessage); ok {
+			t.Fatalf("session conversation stored system message: %#v", message)
+		}
+	}
+}
+
 func TestReActAgentLogsRunStats(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
@@ -45,7 +71,7 @@ func TestReActAgentLogsRunStats(t *testing.T) {
 	}))
 	agent := NewReActAgent(ReActConfig{
 		Provider: usageProvider{},
-		Prompts:  prompt.NewBuilder("system"),
+		Prompts:  newTestPromptBuilder(),
 		Logger:   logger,
 	})
 	session := runtime.NewSession()
@@ -72,6 +98,49 @@ func TestReActAgentLogsRunStats(t *testing.T) {
 	}
 }
 
+func TestReActAgentLogsTimeline(t *testing.T) {
+	registry, err := tool.NewRegistry(localtool.NewEcho())
+	if err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
+	}
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+	agent := NewReActAgent(ReActConfig{
+		Provider: &timelineProvider{},
+		Prompts:  newTestPromptBuilder(),
+		Tools:    registry,
+		Logger:   logger,
+	})
+	session := runtime.NewSession()
+
+	_, err = agent.Run(context.Background(), session, "track timeline")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	output := logs.String()
+	expectedParts := []string{
+		`msg="Round 1: Think"`,
+		`msg="Round 1: Act"`,
+		"decision_summary=",
+		"Need echo to mirror the requested text",
+		`msg="Round 1: Tool echo started"`,
+		"arguments_preview=",
+		`msg="Round 1: Observe echo"`,
+		"result_preview=hello",
+		`msg="Round 2: Think"`,
+		`msg="Round 2: Answer"`,
+	}
+	for _, part := range expectedParts {
+		if !strings.Contains(output, part) {
+			t.Fatalf("timeline log missing %q in %q", part, output)
+		}
+	}
+}
+
 func TestReActAgentHidesRawToolErrorsFromObservation(t *testing.T) {
 	registry, err := tool.NewRegistry(errorTool{})
 	if err != nil {
@@ -81,7 +150,7 @@ func TestReActAgentHidesRawToolErrorsFromObservation(t *testing.T) {
 	provider := &toolErrorProvider{}
 	agent := NewReActAgent(ReActConfig{
 		Provider: provider,
-		Prompts:  prompt.NewBuilder("system"),
+		Prompts:  newTestPromptBuilder(),
 		Tools:    registry,
 		Logger:   logging.NewNopLogger(),
 	})
@@ -112,7 +181,7 @@ func TestReActAgentTimesOutToolCalls(t *testing.T) {
 	provider := &toolTimeoutProvider{}
 	agent := NewReActAgent(ReActConfig{
 		Provider:    provider,
-		Prompts:     prompt.NewBuilder("system"),
+		Prompts:     newTestPromptBuilder(),
 		Tools:       registry,
 		Logger:      logging.NewNopLogger(),
 		ToolTimeout: time.Millisecond,
@@ -147,7 +216,7 @@ func TestReActAgentExecutesToolCalls(t *testing.T) {
 	provider := &scriptedToolProvider{}
 	agent := NewReActAgent(ReActConfig{
 		Provider: provider,
-		Prompts:  prompt.NewBuilder("system"),
+		Prompts:  newTestPromptBuilder(),
 		Tools:    registry,
 		Logger:   logging.NewNopLogger(),
 	})
@@ -166,11 +235,71 @@ func TestReActAgentExecutesToolCalls(t *testing.T) {
 	}
 }
 
+func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
+	registry, err := tool.NewRegistry(
+		localtool.NewEcho(),
+		localtool.NewCalculator(),
+	)
+	if err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
+	}
+
+	provider := &multiRoundToolProvider{}
+	agent := NewReActAgent(ReActConfig{
+		Provider: provider,
+		Prompts:  newTestPromptBuilder(),
+		Tools:    registry,
+		Logger:   logging.NewNopLogger(),
+	})
+	session := runtime.NewSession()
+
+	message, err := agent.Run(context.Background(), session, "multi round")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if got, want := conversation.Text(message), "multi-round complete"; got != want {
+		t.Fatalf("message text = %q, want %q", got, want)
+	}
+	if got, want := provider.calls, 3; got != want {
+		t.Fatalf("provider calls = %d, want %d", got, want)
+	}
+	if got, want := countToolResults(session.Conversation.Messages()), 2; got != want {
+		t.Fatalf("tool result messages = %d, want %d", got, want)
+	}
+}
+
 type scriptedToolProvider struct {
 	calls int
 }
 
 type usageProvider struct{}
+
+type echoTestProvider struct{}
+
+func (p echoTestProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
+	for i := len(request.Messages) - 1; i >= 0; i-- {
+		if _, ok := request.Messages[i].(conversation.UserMessage); ok {
+			return llm.GenerateResponse{
+				Message: conversation.NewAssistantMessage("received: "+conversation.Text(request.Messages[i]), nil),
+			}, nil
+		}
+	}
+	return llm.GenerateResponse{
+		Message: conversation.NewAssistantMessage("received: ", nil),
+	}, nil
+}
+
+type captureMessagesProvider struct {
+	messages []conversation.Message
+}
+
+func (p *captureMessagesProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
+	p.messages = request.Messages
+	return llm.GenerateResponse{
+		Message: conversation.NewAssistantMessage("done", nil),
+	}, nil
+}
 
 func (p usageProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
 	return llm.GenerateResponse{
@@ -180,6 +309,81 @@ func (p usageProvider) Generate(ctx context.Context, request llm.GenerateRequest
 			OutputTokens: 7,
 		},
 	}, nil
+}
+
+type timelineProvider struct {
+	calls int
+}
+
+func (p *timelineProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
+	p.calls++
+	if p.calls == 1 {
+		return llm.GenerateResponse{
+			Message: conversation.NewAssistantMessage("Need echo to mirror the requested text.", []conversation.ToolCall{
+				{
+					ID:   "call-echo",
+					Name: "echo",
+					Arguments: map[string]any{
+						"text": "hello",
+					},
+				},
+			}),
+		}, nil
+	}
+
+	return llm.GenerateResponse{
+		Message: conversation.NewAssistantMessage("done", nil),
+	}, nil
+}
+
+type multiRoundToolProvider struct {
+	calls int
+}
+
+func (p *multiRoundToolProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
+	p.calls++
+	switch p.calls {
+	case 1:
+		return llm.GenerateResponse{
+			Message: conversation.NewAssistantMessage("", []conversation.ToolCall{
+				{
+					ID:   "call-echo",
+					Name: "echo",
+					Arguments: map[string]any{
+						"text": "first observation",
+					},
+				},
+			}),
+		}, nil
+	case 2:
+		transcript := toolTranscript(request.Messages)
+		if !strings.Contains(transcript, "call-echo=first observation") {
+			return llm.GenerateResponse{}, fmt.Errorf("missing first observation in %q", transcript)
+		}
+		return llm.GenerateResponse{
+			Message: conversation.NewAssistantMessage("", []conversation.ToolCall{
+				{
+					ID:   "call-calc",
+					Name: "calculator",
+					Arguments: map[string]any{
+						"operation": "add",
+						"a":         20,
+						"b":         22,
+					},
+				},
+			}),
+		}, nil
+	case 3:
+		transcript := toolTranscript(request.Messages)
+		if !strings.Contains(transcript, "call-calc=42") {
+			return llm.GenerateResponse{}, fmt.Errorf("missing second observation in %q", transcript)
+		}
+		return llm.GenerateResponse{
+			Message: conversation.NewAssistantMessage("multi-round complete", nil),
+		}, nil
+	default:
+		return llm.GenerateResponse{}, fmt.Errorf("unexpected provider call %d", p.calls)
+	}
 }
 
 func (p *scriptedToolProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
@@ -327,4 +531,20 @@ func toolTranscript(messages []conversation.Message) string {
 		builder.WriteString("\n")
 	}
 	return builder.String()
+}
+
+func countToolResults(messages []conversation.Message) int {
+	var count int
+	for _, message := range messages {
+		if _, ok := message.(conversation.ToolResultMessage); ok {
+			count++
+		}
+	}
+	return count
+}
+
+func newTestPromptBuilder() *prompt.Builder {
+	return prompt.NewBuilder(prompt.SystemPrompt{
+		SessionText: "system",
+	})
 }

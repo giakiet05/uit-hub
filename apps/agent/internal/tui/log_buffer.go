@@ -5,12 +5,15 @@ import (
 	"sync"
 )
 
+// LogBuffer is an in-memory io.Writer that keeps the most recent log lines for
+// the TUI.
 type LogBuffer struct {
 	mu    sync.Mutex
 	lines []string
 	limit int
 }
 
+// NewLogBuffer creates a bounded log buffer.
 func NewLogBuffer(limit int) *LogBuffer {
 	if limit <= 0 {
 		limit = 500
@@ -21,6 +24,7 @@ func NewLogBuffer(limit int) *LogBuffer {
 	}
 }
 
+// Write appends log bytes to the buffer and trims older lines beyond the limit.
 func (b *LogBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -38,6 +42,7 @@ func (b *LogBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Lines returns a defensive copy of buffered log lines.
 func (b *LogBuffer) Lines() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()

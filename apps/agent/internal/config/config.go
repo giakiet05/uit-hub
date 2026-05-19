@@ -1,3 +1,4 @@
+// Package config loads environment-backed configuration for the agent app.
 package config
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config is the complete runtime configuration for the agent app.
 type Config struct {
 	SystemPrompt string
 	Provider     string
@@ -17,21 +19,25 @@ type Config struct {
 	OpenAI       OpenAIConfig
 }
 
+// AgentConfig contains agent loop limits.
 type AgentConfig struct {
 	MaxRounds   int
 	ToolTimeout time.Duration
 }
 
+// OpenAIConfig contains settings for the OpenAI LLM provider.
 type OpenAIConfig struct {
 	APIKey  string
 	Model   string
 	BaseURL string
 }
 
+// LoadEnv loads local environment variables from a .env file when present.
 func LoadEnv() error {
 	return godotenv.Load()
 }
 
+// Load reads environment variables and validates the selected provider config.
 func Load() (Config, error) {
 	cfg := Config{
 		SystemPrompt: "You are a helpful agent.",
@@ -54,13 +60,7 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-func DefaultForTest() Config {
-	return Config{
-		SystemPrompt: "You are a helpful agent.",
-		Provider:     "echo",
-	}
-}
-
+// envOrDefault reads a trimmed string environment variable.
 func envOrDefault(key string, fallback string) string {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -69,6 +69,7 @@ func envOrDefault(key string, fallback string) string {
 	return value
 }
 
+// envIntOrDefault reads an integer environment variable.
 func envIntOrDefault(key string, fallback int) int {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -82,6 +83,7 @@ func envIntOrDefault(key string, fallback int) int {
 	return parsed
 }
 
+// envDurationOrDefault reads a time.Duration environment variable.
 func envDurationOrDefault(key string, fallback time.Duration) time.Duration {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {

@@ -1,3 +1,5 @@
+// Package openai adapts the OpenAI Responses API to the internal LLM provider
+// interface.
 package openai
 
 import (
@@ -16,18 +18,21 @@ import (
 	"github.com/openai/openai-go/v3/shared"
 )
 
+// Config contains the OpenAI client settings used by Provider.
 type Config struct {
 	APIKey  string
 	Model   string
 	BaseURL string
 }
 
+// Provider implements llm.Provider using the OpenAI Responses API.
 type Provider struct {
 	model  string
 	client openaisdk.Client
 	logger *slog.Logger
 }
 
+// NewProvider creates an OpenAI provider backed by the official OpenAI Go SDK.
 func NewProvider(cfg Config, logger *slog.Logger) *Provider {
 	if logger == nil {
 		logger = logging.NewNopLogger()
@@ -47,6 +52,8 @@ func NewProvider(cfg Config, logger *slog.Logger) *Provider {
 	}
 }
 
+// Generate sends conversation history and tool definitions to OpenAI and maps
+// the response back into internal conversation types.
 func (p *Provider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
 	modelName := request.Model
 	if modelName == "" {
@@ -82,6 +89,7 @@ func (p *Provider) Generate(ctx context.Context, request llm.GenerateRequest) (l
 	}, nil
 }
 
+// toResponsesInput converts internal messages to OpenAI Responses input items.
 func toResponsesInput(messages []conversation.Message) []responses.ResponseInputItemUnionParam {
 	input := make([]responses.ResponseInputItemUnionParam, 0, len(messages))
 	for _, message := range messages {
@@ -104,6 +112,8 @@ func toResponsesInput(messages []conversation.Message) []responses.ResponseInput
 	return input
 }
 
+// toResponsesFunctionCall converts an internal tool call back to an OpenAI
+// function-call input item for the next round.
 func toResponsesFunctionCall(call conversation.ToolCall) responses.ResponseInputItemUnionParam {
 	arguments, err := json.Marshal(call.Arguments)
 	if err != nil {
@@ -112,6 +122,7 @@ func toResponsesFunctionCall(call conversation.ToolCall) responses.ResponseInput
 	return responses.ResponseInputItemParamOfFunctionCall(string(arguments), call.ID, call.Name)
 }
 
+// toResponsesTools converts internal tool definitions to OpenAI function tools.
 func toResponsesTools(tools []tool.Definition) []responses.ToolUnionParam {
 	if len(tools) == 0 {
 		return nil
@@ -131,6 +142,8 @@ func toResponsesTools(tools []tool.Definition) []responses.ToolUnionParam {
 	return params
 }
 
+// toLLMMessage maps OpenAI output text and function calls to an internal
+// assistant message.
 func toLLMMessage(outputText string, output []responses.ResponseOutputItemUnion) (conversation.AssistantMessage, error) {
 	toolCalls := []conversation.ToolCall{}
 	for _, item := range output {
@@ -155,6 +168,7 @@ func toLLMMessage(outputText string, output []responses.ResponseOutputItemUnion)
 	return conversation.NewAssistantMessage(outputText, toolCalls), nil
 }
 
+// toResponsesRole maps internal message roles to OpenAI input roles.
 func toResponsesRole(role conversation.Role) responses.EasyInputMessageRole {
 	switch role {
 	case conversation.RoleSystem:
