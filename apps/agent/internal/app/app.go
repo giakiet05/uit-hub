@@ -3,20 +3,14 @@ package app
 
 import (
 	"context"
-	"errors"
 	"io"
-	"log/slog"
 	"strings"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm/openai"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/localtool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tui"
 )
 
@@ -55,9 +49,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	}
 
 	session := runtime.NewSession()
-	prompts := prompt.NewBuilder(prompt.SystemPrompt{
-		SessionText: cfg.SystemPrompt,
-	})
+	prompts := prompt.NewBuilder(prompt.DefaultSystemPrompt())
 	tools, err := newToolRegistry()
 	if err != nil {
 		logger.DebugContext(ctx, "Tool registry initialization failed", "error", err)
@@ -81,33 +73,4 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	}
 	logger.DebugContext(ctx, "Agent TUI stopped")
 	return nil
-}
-
-// newToolRegistry registers the temporary local tools used by the current
-// baseline agent.
-func newToolRegistry() (*tool.Registry, error) {
-	return tool.NewRegistry(
-		localtool.NewEcho(),
-		localtool.NewCalculator(),
-		localtool.NewCurrentTime(),
-		localtool.NewWriteFile("tmp/agent-files"),
-		localtool.NewKnowledgeLookup(),
-		localtool.NewStudentProfileLookup(),
-	)
-}
-
-// newProvider selects the configured LLM provider.
-func newProvider(cfg config.Config, logger *slog.Logger) (llm.Provider, error) {
-	switch cfg.Provider {
-	case "openai":
-		logger.Debug("Initializing OpenAI LLM provider", "model", cfg.OpenAI.Model, "base_url", cfg.OpenAI.BaseURL)
-		return openai.NewProvider(openai.Config{
-			APIKey:  cfg.OpenAI.APIKey,
-			Model:   cfg.OpenAI.Model,
-			BaseURL: cfg.OpenAI.BaseURL,
-		}, logger), nil
-	default:
-		logger.Debug("Unsupported LLM provider requested", "llm_provider", cfg.Provider)
-		return nil, errors.New("unsupported LLM_PROVIDER: " + cfg.Provider)
-	}
 }

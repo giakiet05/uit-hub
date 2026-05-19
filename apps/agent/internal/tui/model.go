@@ -32,11 +32,23 @@ type model struct {
 	running          bool
 	initialRun       bool
 	mouseEnabled     bool
-	conversation     []string
+	conversation     []conversationItem
 	conversationView viewport.Model
 	logLines         []string
 	logView          viewport.Model
 	err              error
+}
+
+type conversationRole string
+
+const (
+	conversationRoleUser      conversationRole = "user"
+	conversationRoleAssistant conversationRole = "assistant"
+)
+
+type conversationItem struct {
+	role conversationRole
+	text string
 }
 
 // agentResultMsg carries the completed agent response back into the TUI update
@@ -76,7 +88,7 @@ func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.
 		input:            input,
 		initialRun:       initialPrompt != "",
 		mouseEnabled:     false,
-		conversation:     []string{},
+		conversation:     []conversationItem{},
 		conversationView: conversationView,
 		logLines:         []string{},
 		logView:          logView,
@@ -110,11 +122,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = false
 		if typed.err != nil {
 			m.err = typed.err
-			m.conversation = append(m.conversation, "assistant: agent error: "+typed.err.Error())
+			m.conversation = append(m.conversation, conversationItem{
+				role: conversationRoleAssistant,
+				text: "agent error: " + typed.err.Error(),
+			})
 			m.syncConversation(true)
 			return m, nil
 		}
-		m.conversation = append(m.conversation, "assistant: "+typed.text)
+		m.conversation = append(m.conversation, conversationItem{
+			role: conversationRoleAssistant,
+			text: typed.text,
+		})
 		m.syncConversation(true)
 		return m, nil
 	case logRefreshMsg:
@@ -213,7 +231,10 @@ func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 	m.initialRun = false
 	m.running = true
 	m.err = nil
-	m.conversation = append(m.conversation, "user: "+prompt)
+	m.conversation = append(m.conversation, conversationItem{
+		role: conversationRoleUser,
+		text: prompt,
+	})
 	m.syncConversation(true)
 	return m, runAgent(m.ctx, m.agent, m.session, prompt)
 }
@@ -285,10 +306,24 @@ func (m *model) resizeViewports() {
 
 // syncConversation refreshes the conversation viewport content.
 func (m *model) syncConversation(gotoBottom bool) {
-	lines := append([]string{titleStyle.Render("Conversation"), ""}, m.conversation...)
+	lines := []string{titleStyle.Render("Conversation"), ""}
+	for _, item := range m.conversation {
+		lines = append(lines, renderConversationItem(item), "")
+	}
 	m.conversationView.SetContent(paneContent(lines, m.conversationView.Width))
 	if gotoBottom || m.conversationView.PastBottom() {
 		m.conversationView.GotoBottom()
+	}
+}
+
+func renderConversationItem(item conversationItem) string {
+	switch item.role {
+	case conversationRoleUser:
+		return userMessageStyle.Render("> " + item.text)
+	case conversationRoleAssistant:
+		return assistantMessageStyle.Render(item.text)
+	default:
+		return item.text
 	}
 }
 
@@ -446,6 +481,12 @@ var inputCursorStyle = lipgloss.NewStyle().
 var titleStyle = lipgloss.NewStyle().
 	Bold(true).
 	Foreground(lipgloss.Color("39"))
+
+var userMessageStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("220"))
+
+var assistantMessageStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("250"))
 
 var logKeyStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("75"))

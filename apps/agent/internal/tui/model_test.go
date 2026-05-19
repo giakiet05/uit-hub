@@ -20,7 +20,11 @@ func TestModelRendersConversationAndLogs(t *testing.T) {
 	m.width = 80
 	m.height = 24
 	m.resizeViewports()
-	m.conversation = append(m.conversation, "user: hello", "assistant: xin chao")
+	m.conversation = append(
+		m.conversation,
+		conversationItem{role: conversationRoleUser, text: "hello"},
+		conversationItem{role: conversationRoleAssistant, text: "xin chao"},
+	)
 	m.syncConversation(true)
 	m.logLines = logs.Lines()
 	m.syncLogs(true)
@@ -28,8 +32,8 @@ func TestModelRendersConversationAndLogs(t *testing.T) {
 	view := m.View()
 	expectedParts := []string{
 		"Conversation",
-		"user: hello",
-		"assistant: xin chao",
+		"> hello",
+		"xin chao",
 		"Logs",
 		"first log line",
 	}
@@ -37,6 +41,9 @@ func TestModelRendersConversationAndLogs(t *testing.T) {
 		if !strings.Contains(view, part) {
 			t.Fatalf("view missing %q in:\n%s", part, view)
 		}
+	}
+	if strings.Contains(view, "user:") || strings.Contains(view, "assistant:") {
+		t.Fatalf("view should not render role prefixes:\n%s", view)
 	}
 }
 

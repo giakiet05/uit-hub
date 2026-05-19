@@ -8,15 +8,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/joho/godotenv"
 )
 
 // Config is the complete runtime configuration for the agent app.
 type Config struct {
-	SystemPrompt string
-	Provider     string
-	Agent        AgentConfig
-	OpenAI       OpenAIConfig
+	Provider llm.ProviderType
+	Agent    AgentConfig
+	OpenAI   OpenAIConfig
 }
 
 // AgentConfig contains agent loop limits.
@@ -40,8 +40,7 @@ func LoadEnv() error {
 // Load reads environment variables and validates the selected provider config.
 func Load() (Config, error) {
 	cfg := Config{
-		SystemPrompt: "You are a helpful agent.",
-		Provider:     envOrDefault("LLM_PROVIDER", "openai"),
+		Provider: envProviderOrDefault("LLM_PROVIDER", llm.ProviderTypeOpenAI),
 		Agent: AgentConfig{
 			MaxRounds:   envIntOrDefault("AGENT_MAX_ROUNDS", 0),
 			ToolTimeout: envDurationOrDefault("AGENT_TOOL_TIMEOUT", 15*time.Second),
@@ -53,11 +52,16 @@ func Load() (Config, error) {
 		},
 	}
 
-	if cfg.Provider == "openai" && cfg.OpenAI.APIKey == "" {
+	if cfg.Provider == llm.ProviderTypeOpenAI && cfg.OpenAI.APIKey == "" {
 		return Config{}, errors.New("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
 	}
 
 	return cfg, nil
+}
+
+// envProviderOrDefault reads a ProviderType environment variable.
+func envProviderOrDefault(key string, fallback llm.ProviderType) llm.ProviderType {
+	return llm.ProviderType(envOrDefault(key, string(fallback)))
 }
 
 // envOrDefault reads a trimmed string environment variable.

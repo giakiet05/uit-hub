@@ -88,7 +88,7 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 
 	for round := 1; round <= a.maxRounds; round++ {
 		stats.Rounds = round
-		messages := a.prompts.BuildAgentMessages(prompt.AgentTypeReAct, session.Conversation.Messages())
+		messages := a.prompts.BuildAgentMessages(TypeReAct.String(), session.Conversation.Messages())
 		a.writePromptDebugFile(ctx, messages)
 		tools := a.getToolDefinitions()
 		a.trace(

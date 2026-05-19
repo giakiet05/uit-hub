@@ -4,6 +4,14 @@ package llm
 
 import "context"
 
+// ProviderType identifies a concrete LLM provider implementation.
+type ProviderType string
+
+const (
+	// ProviderTypeOpenAI selects the OpenAI provider.
+	ProviderTypeOpenAI ProviderType = "openai"
+)
+
 // Provider generates assistant messages from conversation history and available
 // tool definitions.
 type Provider interface {
