@@ -1,27 +1,16 @@
 package handlers
 
-import (
-	"server/data"
+import "github.com/gofiber/fiber/v2"
 
-	"github.com/gofiber/fiber/v2"
-)
-
-// GET /students
-func GetStudents(c *fiber.Ctx) error {
-	return c.JSON(data.Students)
+// GET /api/students
+func (h *Handler) GetStudents(c *fiber.Ctx) error {
+	resp, appErr := h.uc.ListStudents()
+	return h.respond(c, resp, appErr)
 }
 
-// GET /students/:id
-func GetStudentByID(c *fiber.Ctx) error {
+// GET /api/students/:id
+func (h *Handler) GetStudentByID(c *fiber.Ctx) error {
 	id := c.Params("id")
-
-	for _, student := range data.Students {
-		if student.ID == id {
-			return c.JSON(student)
-		}
-	}
-
-	return c.Status(404).JSON(fiber.Map{
-		"error": "Student not found",
-	})
+	resp, appErr := h.uc.GetStudentByID(id)
+	return h.respond(c, resp, appErr)
 }
