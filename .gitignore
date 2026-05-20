@@ -9,8 +9,7 @@
 .env
 .env.*
 !.env.example
-.agents
-.gitnexus
+
 
 
 # Go
@@ -18,7 +17,9 @@ bin/
 tmp/
 *.test
 coverage.out
+*.log
 
 # Local build artifacts
 apps/fake-uit-server/server
  
+TODO.md
