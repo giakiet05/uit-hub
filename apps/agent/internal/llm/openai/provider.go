@@ -89,6 +89,74 @@ func (p *Provider) Generate(ctx context.Context, request llm.GenerateRequest) (l
 	}, nil
 }
 
+// Stream sends a streaming Responses API request and emits visible assistant
+// text deltas before the final mapped response.
+func (p *Provider) Stream(ctx context.Context, request llm.GenerateRequest) <-chan llm.StreamEvent {
+	events := make(chan llm.StreamEvent)
+	go func() {
+		defer close(events)
+
+		modelName := request.Model
+		if modelName == "" {
+			modelName = p.model
+		}
+
+		p.logger.DebugContext(ctx, "Calling OpenAI Responses streaming API", "model", modelName, "tool_count", len(request.Tools))
+		stream := p.client.Responses.NewStreaming(ctx, responses.ResponseNewParams{
+			Model: shared.ResponsesModel(modelName),
+			Input: responses.ResponseNewParamsInputUnion{
+				OfInputItemList: toResponsesInput(request.Messages),
+			},
+			Tools: toResponsesTools(request.Tools),
+		})
+		defer stream.Close()
+
+		for stream.Next() {
+			event := stream.Current()
+			switch typed := event.AsAny().(type) {
+			case responses.ResponseTextDeltaEvent:
+				if typed.Delta != "" && !emitStreamEvent(ctx, events, llm.TextDeltaEvent{Delta: typed.Delta}) {
+					return
+				}
+			case responses.ResponseCompletedEvent:
+				response := typed.Response
+				p.logger.DebugContext(ctx, "OpenAI Responses streaming API call completed", "model", modelName, "input_tokens", response.Usage.InputTokens, "output_tokens", response.Usage.OutputTokens)
+				message, err := toLLMMessage(response.OutputText(), response.Output)
+				if err != nil {
+					emitStreamEvent(ctx, events, llm.StreamFailedEvent{Err: err})
+					return
+				}
+				emitStreamEvent(ctx, events, llm.StreamCompletedEvent{
+					Response: llm.GenerateResponse{
+						Message: message,
+						Usage: llm.Usage{
+							InputTokens:  int(response.Usage.InputTokens),
+							OutputTokens: int(response.Usage.OutputTokens),
+						},
+					},
+				})
+				return
+			}
+		}
+		if err := stream.Err(); err != nil {
+			p.logger.DebugContext(ctx, "OpenAI Responses streaming API call failed", "model", modelName, "error", err)
+			emitStreamEvent(ctx, events, llm.StreamFailedEvent{Err: err})
+			return
+		}
+		emitStreamEvent(ctx, events, llm.StreamFailedEvent{Err: context.Canceled})
+	}()
+	return events
+}
+
+func emitStreamEvent(ctx context.Context, events chan<- llm.StreamEvent, event llm.StreamEvent) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case events <- event:
+		return true
+	}
+}
+
 // toResponsesInput converts internal messages to OpenAI Responses input items.
 func toResponsesInput(messages []conversation.Message) []responses.ResponseInputItemUnionParam {
 	input := make([]responses.ResponseInputItemUnionParam, 0, len(messages))

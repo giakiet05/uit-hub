@@ -4,12 +4,11 @@ package agent
 import (
 	"context"
 
-	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
 )
 
-// Agent runs one user prompt against a session and returns the assistant message
-// produced by the selected agent loop.
+// Agent runs one user prompt against a session and streams loop events until a
+// terminal event is emitted and the channel closes.
 type Agent interface {
-	Run(ctx context.Context, session *runtime.Session, input string) (conversation.Message, error)
+	Run(ctx context.Context, session *runtime.Session, input string) <-chan Event
 }

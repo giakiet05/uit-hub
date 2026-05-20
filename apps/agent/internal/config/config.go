@@ -47,7 +47,7 @@ func Load() (Config, error) {
 		},
 		OpenAI: OpenAIConfig{
 			APIKey:  strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-			Model:   envOrDefault("OPENAI_MODEL", "gpt-4.1-mini"),
+			Model:   envOrDefault("OPENAI_MODEL", "gpt-5.4-mini"),
 			BaseURL: strings.TrimRight(envOrDefault("OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
 		},
 	}

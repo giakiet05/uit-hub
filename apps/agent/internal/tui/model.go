@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -30,6 +32,8 @@ type model struct {
 	height           int
 	input            textinput.Model
 	running          bool
+	status           string
+	streamingIndex   int
 	initialRun       bool
 	mouseEnabled     bool
 	conversation     []conversationItem
@@ -44,18 +48,32 @@ type conversationRole string
 const (
 	conversationRoleUser      conversationRole = "user"
 	conversationRoleAssistant conversationRole = "assistant"
+	conversationRoleActivity  conversationRole = "activity"
 )
 
 type conversationItem struct {
-	role conversationRole
-	text string
+	role         conversationRole
+	activityKind activityKind
+	text         string
 }
 
-// agentResultMsg carries the completed agent response back into the TUI update
-// loop.
-type agentResultMsg struct {
-	text string
-	err  error
+type activityKind string
+
+const (
+	activityKindRound    activityKind = "round"
+	activityKindThinking activityKind = "thinking"
+	activityKindModel    activityKind = "model"
+	activityKindTool     activityKind = "tool"
+	activityKindObserve  activityKind = "observe"
+	activityKindError    activityKind = "error"
+	activityKindDone     activityKind = "done"
+)
+
+// agentEventMsg carries one streamed agent event back into the TUI update loop.
+type agentEventMsg struct {
+	stream <-chan agent.Event
+	event  agent.Event
+	ok     bool
 }
 
 // logRefreshMsg carries the latest log snapshot into the TUI update loop.
@@ -86,6 +104,7 @@ func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.
 		agent:            runtimeAgent,
 		logs:             logs,
 		input:            input,
+		streamingIndex:   -1,
 		initialRun:       initialPrompt != "",
 		mouseEnabled:     false,
 		conversation:     []conversationItem{},
@@ -118,23 +137,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.updateMouse(typed)
-	case agentResultMsg:
-		m.running = false
-		if typed.err != nil {
-			m.err = typed.err
-			m.conversation = append(m.conversation, conversationItem{
-				role: conversationRoleAssistant,
-				text: "agent error: " + typed.err.Error(),
-			})
-			m.syncConversation(true)
+	case agentEventMsg:
+		if !typed.ok {
+			m.running = false
 			return m, nil
 		}
-		m.conversation = append(m.conversation, conversationItem{
-			role: conversationRoleAssistant,
-			text: typed.text,
-		})
-		m.syncConversation(true)
-		return m, nil
+		m = m.handleAgentEvent(typed.event)
+		return m, waitAgentEvent(typed.stream)
 	case logRefreshMsg:
 		wasAtBottom := m.logView.AtBottom()
 		m.logLines = typed.lines
@@ -231,12 +240,171 @@ func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 	m.initialRun = false
 	m.running = true
 	m.err = nil
+	m.streamingIndex = -1
 	m.conversation = append(m.conversation, conversationItem{
 		role: conversationRoleUser,
 		text: prompt,
 	})
 	m.syncConversation(true)
 	return m, runAgent(m.ctx, m.agent, m.session, prompt)
+}
+
+// handleAgentEvent applies a streamed agent event to the TUI state.
+func (m model) handleAgentEvent(event agent.Event) model {
+	switch typed := event.(type) {
+	case agent.RoundStartedEvent:
+		m.status = fmt.Sprintf("round %d", typed.Round)
+		m.streamingIndex = -1
+		m.appendActivity(activityKindRound, fmt.Sprintf("round %d", typed.Round))
+	case agent.ModelCallStartedEvent:
+		m.status = "thinking"
+		m.appendActivity(activityKindThinking, "thinking")
+	case agent.ModelCallCompletedEvent:
+		m.status = "model response"
+		m.appendActivity(activityKindModel, modelCompletedText(typed))
+	case agent.ModelTextDeltaEvent:
+		m.status = "streaming"
+		m.appendAssistantDelta(typed.Delta)
+	case agent.ToolCallStartedEvent:
+		m.status = "tool " + typed.Call.Name
+		m.streamingIndex = -1
+		m.appendActivity(activityKindTool, toolStartedText(typed))
+	case agent.ToolCallCompletedEvent:
+		m.status = "observe " + typed.Result.Name
+		m.appendActivity(activityKindObserve, toolCompletedText(typed))
+	case agent.ToolCallFailedEvent:
+		m.status = "tool failed " + typed.Call.Name
+		m.appendActivity(activityKindError, "tool failed "+typed.Call.Name+": "+typed.Observation)
+	case agent.FinalAnswerEvent:
+		m.status = "answer"
+		m.setFinalAnswer(conversation.Text(typed.Message))
+		m.syncConversation(true)
+	case agent.RunFailedEvent:
+		m.status = ""
+		m.streamingIndex = -1
+		m.err = typed.Err
+		m.conversation = append(m.conversation, conversationItem{
+			role: conversationRoleAssistant,
+			text: "agent error: " + typed.Err.Error(),
+		})
+		m.syncConversation(true)
+	case agent.RunCompletedEvent:
+		m.status = ""
+		m.streamingIndex = -1
+		m.err = nil
+		m.appendActivity(activityKindDone, "completed: "+string(typed.Reason))
+	}
+	return m
+}
+
+func (m *model) appendActivity(kind activityKind, text string) {
+	m.conversation = append(m.conversation, conversationItem{
+		role:         conversationRoleActivity,
+		activityKind: kind,
+		text:         text,
+	})
+	m.syncConversation(true)
+}
+
+func (m *model) appendAssistantDelta(delta string) {
+	if delta == "" {
+		return
+	}
+	if m.streamingIndex < 0 || m.streamingIndex >= len(m.conversation) {
+		m.conversation = append(m.conversation, conversationItem{
+			role: conversationRoleAssistant,
+			text: delta,
+		})
+		m.streamingIndex = len(m.conversation) - 1
+		m.syncConversation(true)
+		return
+	}
+	m.conversation[m.streamingIndex].text += delta
+	m.syncConversation(true)
+}
+
+func (m *model) setFinalAnswer(text string) {
+	if m.streamingIndex >= 0 && m.streamingIndex < len(m.conversation) {
+		m.conversation[m.streamingIndex].text = text
+		m.streamingIndex = -1
+		return
+	}
+	m.conversation = append(m.conversation, conversationItem{
+		role: conversationRoleAssistant,
+		text: text,
+	})
+}
+
+func modelCompletedText(event agent.ModelCallCompletedEvent) string {
+	messageText := strings.TrimSpace(event.MessageText)
+	if event.TextStreamed {
+		messageText = ""
+	}
+	if len(event.ToolCallNames) == 0 {
+		if messageText != "" {
+			return fmt.Sprintf(
+				"model response: %s, input=%d output=%d",
+				previewActivityText(messageText),
+				event.Usage.InputTokens,
+				event.Usage.OutputTokens,
+			)
+		}
+		return fmt.Sprintf(
+			"model response: no tool calls, input=%d output=%d",
+			event.Usage.InputTokens,
+			event.Usage.OutputTokens,
+		)
+	}
+	if messageText != "" {
+		return fmt.Sprintf(
+			"model response: %s; tool calls %s, input=%d output=%d",
+			previewActivityText(messageText),
+			strings.Join(event.ToolCallNames, ", "),
+			event.Usage.InputTokens,
+			event.Usage.OutputTokens,
+		)
+	}
+	return fmt.Sprintf(
+		"model response: tool calls %s, input=%d output=%d",
+		strings.Join(event.ToolCallNames, ", "),
+		event.Usage.InputTokens,
+		event.Usage.OutputTokens,
+	)
+}
+
+func toolCompletedText(event agent.ToolCallCompletedEvent) string {
+	preview := strings.TrimSpace(event.Result.Content)
+	if preview == "" {
+		return "observe " + event.Result.Name
+	}
+	return fmt.Sprintf("observe %s: %s", event.Result.Name, previewActivityText(preview))
+}
+
+func toolStartedText(event agent.ToolCallStartedEvent) string {
+	args := previewToolArguments(event.Call.Arguments)
+	if args == "" {
+		return "tool " + event.Call.Name
+	}
+	return fmt.Sprintf("tool %s %s", event.Call.Name, args)
+}
+
+func previewToolArguments(arguments map[string]any) string {
+	if len(arguments) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(arguments)
+	if err != nil {
+		return previewActivityText(fmt.Sprintf("%v", arguments))
+	}
+	return previewActivityText(string(data))
+}
+
+func previewActivityText(text string) string {
+	text = strings.ReplaceAll(text, "\n", " ")
+	if len([]rune(text)) > 120 {
+		return string([]rune(text)[:120]) + "..."
+	}
+	return text
 }
 
 // View renders the full TUI frame.
@@ -256,7 +424,7 @@ func (m model) View() string {
 func (m model) renderInput() string {
 	status := ""
 	if m.running {
-		status = " running"
+		status = " " + m.agentStatus()
 	}
 	if m.err != nil {
 		status += " error"
@@ -274,6 +442,13 @@ func (m model) renderInput() string {
 		contentWidth = 1
 	}
 	return inputStyle.Width(contentWidth).Height(inputHeight - 2).Render(text + status)
+}
+
+func (m model) agentStatus() string {
+	if m.status != "" {
+		return m.status
+	}
+	return "running"
 }
 
 // mainHeight returns the height available to the conversation and log panes.
@@ -322,6 +497,8 @@ func renderConversationItem(item conversationItem) string {
 		return userMessageStyle.Render("> " + item.text)
 	case conversationRoleAssistant:
 		return assistantMessageStyle.Render(item.text)
+	case conversationRoleActivity:
+		return activityMessageStyle(item.activityKind).Render("- " + item.text)
 	default:
 		return item.text
 	}
@@ -440,14 +617,17 @@ func logValueStyle(key string, value string) lipgloss.Style {
 	}
 }
 
-// runAgent starts an agent run as a Bubble Tea command.
+// runAgent starts an agent event stream as a Bubble Tea command.
 func runAgent(ctx context.Context, runtimeAgent agent.Agent, session *runtime.Session, prompt string) tea.Cmd {
+	stream := runtimeAgent.Run(ctx, session, prompt)
+	return waitAgentEvent(stream)
+}
+
+// waitAgentEvent waits for the next event from an agent stream.
+func waitAgentEvent(stream <-chan agent.Event) tea.Cmd {
 	return func() tea.Msg {
-		message, err := runtimeAgent.Run(ctx, session, prompt)
-		if err != nil {
-			return agentResultMsg{err: err}
-		}
-		return agentResultMsg{text: conversation.Text(message)}
+		event, ok := <-stream
+		return agentEventMsg{stream: stream, event: event, ok: ok}
 	}
 }
 
@@ -487,6 +667,27 @@ var userMessageStyle = lipgloss.NewStyle().
 
 var assistantMessageStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("250"))
+
+func activityMessageStyle(kind activityKind) lipgloss.Style {
+	switch kind {
+	case activityKindRound:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("111"))
+	case activityKindThinking:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("183"))
+	case activityKindModel:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
+	case activityKindTool:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	case activityKindObserve:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("114"))
+	case activityKindError:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	case activityKindDone:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("120"))
+	default:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
+	}
+}
 
 var logKeyStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("75"))

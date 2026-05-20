@@ -22,8 +22,6 @@ import (
 const defaultMaxToolIterations = 8
 const logPreviewLimit = 160
 
-var ErrMaxRoundsReached = errors.New("agent loop reached maximum tool iterations")
-
 // ReActAgent implements the baseline reason-act-observe loop for tool-calling
 // agents.
 type ReActAgent struct {
@@ -74,16 +72,42 @@ func NewReActAgent(cfg ReActConfig) *ReActAgent {
 	}
 }
 
-// Run appends the user prompt to the session and loops until the model returns
-// a final assistant message or the configured round limit is reached.
-func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userPrompt string) (conversation.Message, error) {
-	session.Conversation.Append(conversation.NewUserMessage(userPrompt))
+// Run appends the user prompt to the session and streams loop events until the
+// model returns a final answer or the configured round limit is reached.
+func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userPrompt string) <-chan Event {
+	events := make(chan Event)
+	go a.run(ctx, events, session, userPrompt)
+	return events
+}
+
+func (a *ReActAgent) run(ctx context.Context, events chan<- Event, session *runtime.Session, userPrompt string) {
+	defer close(events)
+
 	stats := NewRunStats()
-	defer func() {
+	fail := func(err error) {
 		stats.Finish()
 		a.logRunStats(ctx, session.ID, stats)
-	}()
+		emit(ctx, events, RunFailedEvent{
+			SessionID: session.ID,
+			Err:       err,
+			Stats:     *stats,
+		})
+	}
+	complete := func(reason TerminalReason) {
+		stats.Finish()
+		a.logRunStats(ctx, session.ID, stats)
+		emit(ctx, events, RunCompletedEvent{
+			SessionID: session.ID,
+			Reason:    reason,
+			Stats:     *stats,
+		})
+	}
 
+	if !emit(ctx, events, RunStartedEvent{SessionID: session.ID, MaxRounds: a.maxRounds}) {
+		return
+	}
+
+	session.Conversation.Append(conversation.NewUserMessage(userPrompt))
 	a.trace(ctx, "react.run.started", "Agent started", "session_id", session.ID, "max_rounds", a.maxRounds)
 
 	for round := 1; round <= a.maxRounds; round++ {
@@ -91,6 +115,14 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 		messages := a.prompts.BuildAgentMessages(TypeReAct.String(), session.Conversation.Messages())
 		a.writePromptDebugFile(ctx, messages)
 		tools := a.getToolDefinitions()
+		if !emit(ctx, events, RoundStartedEvent{
+			SessionID:    session.ID,
+			Round:        round,
+			MessageCount: len(messages),
+			ToolCount:    len(tools),
+		}) {
+			return
+		}
 		a.trace(
 			ctx,
 			"react.round.generating",
@@ -100,9 +132,13 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 			"tool_count", len(tools),
 			"round", round,
 		)
+
+		if !emit(ctx, events, ModelCallStartedEvent{SessionID: session.ID, Round: round}) {
+			return
+		}
 		llmStartedAt := time.Now()
 		stats.LLMCalls++
-		response, err := a.provider.Generate(ctx, llm.GenerateRequest{
+		response, textStreamed, err := a.generate(ctx, events, round, llm.GenerateRequest{
 			SessionID: session.ID,
 			Messages:  messages,
 			Tools:     tools,
@@ -118,7 +154,8 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 				"duration", llmDuration.String(),
 				"error", err,
 			)
-			return nil, err
+			fail(err)
+			return
 		}
 		stats.InputTokens += response.Usage.InputTokens
 		stats.OutputTokens += response.Usage.OutputTokens
@@ -137,8 +174,24 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 			"output_tokens", response.Usage.OutputTokens,
 			"duration", llmDuration.String(),
 		)
+		if !emit(ctx, events, ModelCallCompletedEvent{
+			SessionID:     session.ID,
+			Round:         round,
+			Usage:         response.Usage,
+			Duration:      llmDuration,
+			ToolCallNames: toolCallNames(toolCalls),
+			MessageText:   conversation.Text(response.Message),
+			TextStreamed:  textStreamed,
+		}) {
+			return
+		}
 
 		if len(toolCalls) == 0 {
+			assistantMessage, ok := response.Message.(conversation.AssistantMessage)
+			if !ok {
+				fail(errors.New("llm response is not an assistant message"))
+				return
+			}
 			a.trace(
 				ctx,
 				"react.round.answer",
@@ -147,8 +200,16 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 				"round", round,
 				"answer_chars", len(conversation.Text(response.Message)),
 			)
+			if !emit(ctx, events, FinalAnswerEvent{
+				SessionID: session.ID,
+				Round:     round,
+				Message:   assistantMessage,
+			}) {
+				return
+			}
 			a.trace(ctx, "react.run.completed", "Agent completed", "session_id", session.ID, "round", round)
-			return response.Message, nil
+			complete(TerminalCompleted)
+			return
 		}
 
 		a.trace(
@@ -162,8 +223,8 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 			"tool_names", strings.Join(toolCallNames(toolCalls), ","),
 		)
 
-		if err := a.executeToolCalls(ctx, session, round, toolCalls, stats); err != nil {
-			return nil, err
+		if ok := a.executeToolCalls(ctx, events, session, round, toolCalls, stats); !ok {
+			return
 		}
 	}
 
@@ -174,7 +235,38 @@ func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userProm
 		"session_id", session.ID,
 		"max_rounds", a.maxRounds,
 	)
-	return nil, ErrMaxRoundsReached
+	complete(TerminalMaxRounds)
+}
+
+func (a *ReActAgent) generate(ctx context.Context, events chan<- Event, round int, request llm.GenerateRequest) (llm.GenerateResponse, bool, error) {
+	streamer, ok := a.provider.(llm.StreamProvider)
+	if !ok {
+		response, err := a.provider.Generate(ctx, request)
+		return response, false, err
+	}
+
+	var response llm.GenerateResponse
+	textStreamed := false
+	for event := range streamer.Stream(ctx, request) {
+		switch typed := event.(type) {
+		case llm.TextDeltaEvent:
+			textStreamed = true
+			if !emit(ctx, events, ModelTextDeltaEvent{
+				SessionID: request.SessionID,
+				Round:     round,
+				Delta:     typed.Delta,
+			}) {
+				return llm.GenerateResponse{}, textStreamed, ctx.Err()
+			}
+		case llm.StreamCompletedEvent:
+			response = typed.Response
+			return response, textStreamed, nil
+		case llm.StreamFailedEvent:
+			return llm.GenerateResponse{}, textStreamed, typed.Err
+		}
+	}
+
+	return llm.GenerateResponse{}, textStreamed, errors.New("llm stream closed without completion")
 }
 
 // writePromptDebugFile writes the latest LLM message stack for local prompt
@@ -224,17 +316,33 @@ func (a *ReActAgent) getToolDefinitions() []tool.Definition {
 // back into the session conversation.
 func (a *ReActAgent) executeToolCalls(
 	ctx context.Context,
+	events chan<- Event,
 	session *runtime.Session,
 	round int,
 	calls []conversation.ToolCall,
 	stats *RunStats,
-) error {
+) bool {
 	if a.tools == nil {
-		return errors.New("assistant requested tool call but no tools are registered")
+		stats.Finish()
+		a.logRunStats(ctx, session.ID, stats)
+		emit(ctx, events, RunFailedEvent{
+			SessionID: session.ID,
+			Err:       errors.New("assistant requested tool call but no tools are registered"),
+			Stats:     *stats,
+		})
+		return false
 	}
 
 	for _, call := range calls {
 		stats.ToolCalls++
+		if !emit(ctx, events, ToolCallStartedEvent{
+			SessionID: session.ID,
+			Round:     round,
+			Call:      call,
+			Timeout:   a.toolTimeout,
+		}) {
+			return false
+		}
 		a.trace(
 			ctx,
 			"react.tool.started",
@@ -251,6 +359,7 @@ func (a *ReActAgent) executeToolCalls(
 		toolDuration := time.Since(toolStartedAt)
 		if err != nil {
 			stats.ToolFailures++
+			observation := toolErrorObservation(err)
 			a.trace(
 				ctx,
 				"react.tool.failed",
@@ -265,11 +374,30 @@ func (a *ReActAgent) executeToolCalls(
 			result = tool.Result{
 				CallID:  call.ID,
 				Name:    call.Name,
-				Content: toolErrorObservation(err),
+				Content: observation,
+			}
+			if !emit(ctx, events, ToolCallFailedEvent{
+				SessionID:   session.ID,
+				Round:       round,
+				Call:        call,
+				Observation: observation,
+				Duration:    toolDuration,
+			}) {
+				return false
 			}
 		}
 
 		result = normalizeToolResult(call, result)
+		if err == nil {
+			if !emit(ctx, events, ToolCallCompletedEvent{
+				SessionID: session.ID,
+				Round:     round,
+				Result:    result,
+				Duration:  toolDuration,
+			}) {
+				return false
+			}
+		}
 		session.Conversation.Append(conversation.NewToolResultMessage(result.CallID, result.Content))
 		a.trace(
 			ctx,
@@ -285,7 +413,16 @@ func (a *ReActAgent) executeToolCalls(
 		)
 	}
 
-	return nil
+	return true
+}
+
+func emit(ctx context.Context, events chan<- Event, event Event) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case events <- event:
+		return true
+	}
 }
 
 // executeToolCall runs a single tool call with the configured timeout.

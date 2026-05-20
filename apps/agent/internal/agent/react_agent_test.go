@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -27,10 +28,7 @@ func TestReActAgentRunsProvider(t *testing.T) {
 	})
 	session := runtime.NewSession()
 
-	message, err := agent.Run(context.Background(), session, "xin chao")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	message := runAgentForAnswer(t, agent, session, "xin chao")
 
 	if got, want := conversation.Text(message), "received: xin chao"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -46,10 +44,7 @@ func TestReActAgentSendsSystemPromptWithoutStoringItInConversation(t *testing.T)
 	})
 	session := runtime.NewSession()
 
-	_, err := agent.Run(context.Background(), session, "xin chao")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	_ = runAgentForAnswer(t, agent, session, "xin chao")
 
 	if len(provider.messages) == 0 {
 		t.Fatal("provider received no messages")
@@ -76,10 +71,7 @@ func TestReActAgentLogsRunStats(t *testing.T) {
 	})
 	session := runtime.NewSession()
 
-	_, err := agent.Run(context.Background(), session, "track stats")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	_ = runAgentForAnswer(t, agent, session, "track stats")
 
 	output := logs.String()
 	expectedParts := []string{
@@ -116,10 +108,7 @@ func TestReActAgentLogsTimeline(t *testing.T) {
 	})
 	session := runtime.NewSession()
 
-	_, err = agent.Run(context.Background(), session, "track timeline")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	_ = runAgentForAnswer(t, agent, session, "track timeline")
 
 	output := logs.String()
 	expectedParts := []string{
@@ -156,10 +145,7 @@ func TestReActAgentHidesRawToolErrorsFromObservation(t *testing.T) {
 	})
 	session := runtime.NewSession()
 
-	message, err := agent.Run(context.Background(), session, "test failing tool")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	message := runAgentForAnswer(t, agent, session, "test failing tool")
 
 	if got, want := conversation.Text(message), "handled failure"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -188,10 +174,7 @@ func TestReActAgentTimesOutToolCalls(t *testing.T) {
 	})
 	session := runtime.NewSession()
 
-	message, err := agent.Run(context.Background(), session, "test slow tool")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	message := runAgentForAnswer(t, agent, session, "test slow tool")
 
 	if got, want := conversation.Text(message), "handled timeout"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -222,10 +205,7 @@ func TestReActAgentExecutesToolCalls(t *testing.T) {
 	})
 	session := runtime.NewSession()
 
-	message, err := agent.Run(context.Background(), session, "test tools")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	message := runAgentForAnswer(t, agent, session, "test tools")
 
 	if got, want := conversation.Text(message), "all tools completed"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -253,10 +233,7 @@ func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
 	})
 	session := runtime.NewSession()
 
-	message, err := agent.Run(context.Background(), session, "multi round")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
+	message := runAgentForAnswer(t, agent, session, "multi round")
 
 	if got, want := conversation.Text(message), "multi-round complete"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -267,6 +244,109 @@ func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
 	if got, want := countToolResults(session.Conversation.Messages()), 2; got != want {
 		t.Fatalf("tool result messages = %d, want %d", got, want)
 	}
+}
+
+func TestReActAgentEmitsToolEvents(t *testing.T) {
+	registry, err := tool.NewRegistry(localtool.NewEcho())
+	if err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
+	}
+
+	agent := NewReActAgent(ReActConfig{
+		Provider: &timelineProvider{},
+		Prompts:  newTestPromptBuilder(),
+		Tools:    registry,
+		Logger:   logging.NewNopLogger(),
+	})
+	session := runtime.NewSession()
+
+	events := collectAgentEvents(t, agent.Run(context.Background(), session, "track events"))
+	assertEventType(t, events, RunStartedEvent{})
+	assertEventType(t, events, RoundStartedEvent{})
+	assertEventType(t, events, ModelCallStartedEvent{})
+	assertEventType(t, events, ModelCallCompletedEvent{})
+	assertEventType(t, events, ToolCallStartedEvent{})
+	assertEventType(t, events, ToolCallCompletedEvent{})
+	assertEventType(t, events, FinalAnswerEvent{})
+
+	completed := lastCompletedEvent(t, events)
+	if completed.Reason != TerminalCompleted {
+		t.Fatalf("terminal reason = %q, want %q", completed.Reason, TerminalCompleted)
+	}
+}
+
+func TestReActAgentEmitsMaxRounds(t *testing.T) {
+	registry, err := tool.NewRegistry(localtool.NewEcho())
+	if err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
+	}
+
+	agent := NewReActAgent(ReActConfig{
+		Provider:  &timelineProvider{},
+		Prompts:   newTestPromptBuilder(),
+		Tools:     registry,
+		Logger:    logging.NewNopLogger(),
+		MaxRounds: 1,
+	})
+	session := runtime.NewSession()
+
+	events := collectAgentEvents(t, agent.Run(context.Background(), session, "hit max rounds"))
+	completed := lastCompletedEvent(t, events)
+	if completed.Reason != TerminalMaxRounds {
+		t.Fatalf("terminal reason = %q, want %q", completed.Reason, TerminalMaxRounds)
+	}
+}
+
+func runAgentForAnswer(t *testing.T, runtimeAgent *ReActAgent, session *runtime.Session, input string) conversation.Message {
+	t.Helper()
+
+	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, input))
+	for _, event := range events {
+		if failed, ok := event.(RunFailedEvent); ok {
+			t.Fatalf("Run() failed: %v", failed.Err)
+		}
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		if answer, ok := events[i].(FinalAnswerEvent); ok {
+			return answer.Message
+		}
+	}
+	t.Fatalf("Run() emitted no final answer: %#v", events)
+	return nil
+}
+
+func collectAgentEvents(t *testing.T, stream <-chan Event) []Event {
+	t.Helper()
+
+	events := []Event{}
+	for event := range stream {
+		events = append(events, event)
+	}
+	return events
+}
+
+func assertEventType(t *testing.T, events []Event, target Event) {
+	t.Helper()
+
+	targetType := reflect.TypeOf(target)
+	for _, event := range events {
+		if reflect.TypeOf(event) == targetType {
+			return
+		}
+	}
+	t.Fatalf("missing event type %T in %#v", target, events)
+}
+
+func lastCompletedEvent(t *testing.T, events []Event) RunCompletedEvent {
+	t.Helper()
+
+	for i := len(events) - 1; i >= 0; i-- {
+		if completed, ok := events[i].(RunCompletedEvent); ok {
+			return completed
+		}
+	}
+	t.Fatalf("missing RunCompletedEvent in %#v", events)
+	return RunCompletedEvent{}
 }
 
 type scriptedToolProvider struct {
