@@ -1,0 +1,12 @@
+client:
+  name: uit-hub-agent
+  version: 0.1.0
+
+servers:
+  - name: mock_uit
+    transport: stdio
+    command: go
+    args:
+      - run
+      - ../mock-mcp-server/cmd/server
+    workdir: ""

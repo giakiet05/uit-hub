@@ -13,7 +13,7 @@ type Tool interface {
 type Definition struct {
 	Name        string
 	Description string
-	InputSchema map[string]any
+	InputSchema JSONSchema
 }
 
 // Call is one model-requested tool invocation.

@@ -571,9 +571,7 @@ func (t errorTool) Definition() tool.Definition {
 	return tool.Definition{
 		Name:        "error_tool",
 		Description: "Always fails.",
-		InputSchema: map[string]any{
-			"type": "object",
-		},
+		InputSchema: tool.EmptyInputSchema(),
 	}
 }
 
@@ -587,9 +585,7 @@ func (t blockingTool) Definition() tool.Definition {
 	return tool.Definition{
 		Name:        "blocking_tool",
 		Description: "Blocks until context cancellation.",
-		InputSchema: map[string]any{
-			"type": "object",
-		},
+		InputSchema: tool.EmptyInputSchema(),
 	}
 }
 

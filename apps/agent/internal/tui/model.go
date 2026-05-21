@@ -344,7 +344,7 @@ func modelCompletedText(event agent.ModelCallCompletedEvent) string {
 		if messageText != "" {
 			return fmt.Sprintf(
 				"model response: %s, input=%d output=%d",
-				previewActivityText(messageText),
+				activityText(messageText),
 				event.Usage.InputTokens,
 				event.Usage.OutputTokens,
 			)
@@ -358,7 +358,7 @@ func modelCompletedText(event agent.ModelCallCompletedEvent) string {
 	if messageText != "" {
 		return fmt.Sprintf(
 			"model response: %s; tool calls %s, input=%d output=%d",
-			previewActivityText(messageText),
+			activityText(messageText),
 			strings.Join(event.ToolCallNames, ", "),
 			event.Usage.InputTokens,
 			event.Usage.OutputTokens,
@@ -377,7 +377,7 @@ func toolCompletedText(event agent.ToolCallCompletedEvent) string {
 	if preview == "" {
 		return "observe " + event.Result.Name
 	}
-	return fmt.Sprintf("observe %s: %s", event.Result.Name, previewActivityText(preview))
+	return fmt.Sprintf("observe %s: %s", event.Result.Name, activityText(preview))
 }
 
 func toolStartedText(event agent.ToolCallStartedEvent) string {
@@ -394,16 +394,12 @@ func previewToolArguments(arguments map[string]any) string {
 	}
 	data, err := json.Marshal(arguments)
 	if err != nil {
-		return previewActivityText(fmt.Sprintf("%v", arguments))
+		return activityText(fmt.Sprintf("%v", arguments))
 	}
-	return previewActivityText(string(data))
+	return activityText(string(data))
 }
 
-func previewActivityText(text string) string {
-	text = strings.ReplaceAll(text, "\n", " ")
-	if len([]rune(text)) > 120 {
-		return string([]rune(text)[:120]) + "..."
-	}
+func activityText(text string) string {
 	return text
 }
 
