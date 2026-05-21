@@ -20,7 +20,6 @@ import (
 )
 
 const defaultMaxToolIterations = 8
-const logPreviewLimit = 160
 
 // ReActAgent implements the baseline reason-act-observe loop for tool-calling
 // agents.
@@ -303,8 +302,8 @@ func getAssistantToolCalls(message conversation.Message) []conversation.ToolCall
 	return assistant.ToolCalls
 }
 
-// getToolDefinitions returns the current tool schemas, or nil when the agent has
-// no registry.
+// getToolDefinitions returns the current tool definitions, or nil when the
+// agent has no registry.
 func (a *ReActAgent) getToolDefinitions() []tool.Definition {
 	if a.tools == nil {
 		return nil
@@ -487,7 +486,7 @@ func decisionSummary(message conversation.Message) string {
 	return previewText(text)
 }
 
-// previewValue renders a structured value as a bounded single-line log preview.
+// previewValue renders a structured value as a single-line log value.
 func previewValue(value any) string {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -496,15 +495,9 @@ func previewValue(value any) string {
 	return previewText(string(data))
 }
 
-// previewText returns a bounded single-line preview suitable for structured
-// logs.
+// previewText returns a single-line value suitable for structured logs.
 func previewText(text string) string {
-	text = strings.ReplaceAll(text, "\n", "\\n")
-	runes := []rune(text)
-	if len(runes) <= logPreviewLimit {
-		return text
-	}
-	return string(runes[:logPreviewLimit]) + "..."
+	return strings.ReplaceAll(text, "\n", "\\n")
 }
 
 // trace writes a debug event with a stable event key.

@@ -202,7 +202,7 @@ func toResponsesTools(tools []tool.Definition) []responses.ToolUnionParam {
 			OfFunction: &responses.FunctionToolParam{
 				Name:        tool.Name,
 				Description: openaisdk.String(tool.Description),
-				Parameters:  tool.InputSchema,
+				Parameters:  tool.InputSchema.Clone(),
 				Strict:      openaisdk.Bool(false),
 			},
 		})

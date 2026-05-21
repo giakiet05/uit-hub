@@ -21,17 +21,12 @@ func (t *Echo) Definition() tool.Definition {
 	return tool.Definition{
 		Name:        "echo",
 		Description: "Return the provided text exactly as received.",
-		InputSchema: map[string]any{
-			"type":                 "object",
-			"additionalProperties": false,
-			"properties": map[string]any{
-				"text": map[string]any{
-					"type":        "string",
-					"description": "The text to echo.",
-				},
+		InputSchema: tool.ObjectSchema(
+			map[string]any{
+				"text": tool.StringProperty("The text to echo."),
 			},
-			"required": []string{"text"},
-		},
+			"text",
+		),
 	}
 }
 

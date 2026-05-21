@@ -3,11 +3,9 @@ package localtool
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
@@ -27,21 +25,14 @@ func (t *WriteFile) Definition() tool.Definition {
 	return tool.Definition{
 		Name:        "write_file",
 		Description: "Write text content to a file inside the agent file sandbox.",
-		InputSchema: map[string]any{
-			"type":                 "object",
-			"additionalProperties": false,
-			"properties": map[string]any{
-				"path": map[string]any{
-					"type":        "string",
-					"description": "Relative file path inside the sandbox, for example notes/result.txt.",
-				},
-				"content": map[string]any{
-					"type":        "string",
-					"description": "Text content to write.",
-				},
+		InputSchema: tool.ObjectSchema(
+			map[string]any{
+				"path":    tool.StringProperty("Relative file path inside the sandbox, for example notes/result.txt."),
+				"content": tool.StringProperty("Text content to write."),
 			},
-			"required": []string{"path", "content"},
-		},
+			"path",
+			"content",
+		),
 	}
 }
 
@@ -61,7 +52,7 @@ func (t *WriteFile) Execute(ctx context.Context, call tool.Call) (tool.Result, e
 		return tool.Result{}, err
 	}
 
-	fullPath, err := t.safePath(relativePath)
+	fullPath, err := safeSandboxPath(t.rootDir, relativePath)
 	if err != nil {
 		return tool.Result{}, err
 	}
@@ -85,35 +76,4 @@ func (t *WriteFile) Execute(ctx context.Context, call tool.Call) (tool.Result, e
 		Name:    call.Name,
 		Content: string(output),
 	}, nil
-}
-
-// safePath resolves a requested relative path and rejects attempts to escape the
-// sandbox root.
-func (t *WriteFile) safePath(relativePath string) (string, error) {
-	if strings.TrimSpace(relativePath) == "" {
-		return "", errors.New("path must not be empty")
-	}
-	if filepath.IsAbs(relativePath) {
-		return "", errors.New("path must be relative")
-	}
-
-	cleanPath := filepath.Clean(relativePath)
-	if cleanPath == "." || strings.HasPrefix(cleanPath, ".."+string(filepath.Separator)) || cleanPath == ".." {
-		return "", errors.New("path escapes sandbox")
-	}
-
-	rootDir := t.rootDir
-	if rootDir == "" {
-		rootDir = filepath.Join("tmp", "agent-files")
-	}
-	rootDir, err := filepath.Abs(rootDir)
-	if err != nil {
-		return "", fmt.Errorf("resolve sandbox root: %w", err)
-	}
-
-	fullPath := filepath.Join(rootDir, cleanPath)
-	if !strings.HasPrefix(fullPath, rootDir+string(filepath.Separator)) && fullPath != rootDir {
-		return "", errors.New("path escapes sandbox")
-	}
-	return fullPath, nil
 }

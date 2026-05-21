@@ -29,17 +29,12 @@ func (t *CurrentTime) Definition() tool.Definition {
 	return tool.Definition{
 		Name:        "current_time",
 		Description: "Return the current time in RFC3339 format for a timezone.",
-		InputSchema: map[string]any{
-			"type":                 "object",
-			"additionalProperties": false,
-			"properties": map[string]any{
-				"timezone": map[string]any{
-					"type":        "string",
-					"description": "IANA timezone name, for example Asia/Ho_Chi_Minh. Defaults to UTC.",
-				},
+		InputSchema: tool.ObjectSchema(
+			map[string]any{
+				"timezone": tool.StringProperty("IANA timezone name, for example Asia/Ho_Chi_Minh. Defaults to UTC."),
 			},
-			"required": []string{"timezone"},
-		},
+			"timezone",
+		),
 	}
 }
 

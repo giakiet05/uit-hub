@@ -12,15 +12,17 @@ var ErrNotFound = errors.New("tool not found")
 // Registry stores tools by name and preserves registration order for schema
 // generation.
 type Registry struct {
-	tools map[string]Tool
-	order []string
+	tools       map[string]Tool
+	definitions map[string]Definition
+	order       []string
 }
 
 // NewRegistry creates a registry and registers the provided tools.
 func NewRegistry(tools ...Tool) (*Registry, error) {
 	registry := &Registry{
-		tools: make(map[string]Tool, len(tools)),
-		order: make([]string, 0, len(tools)),
+		tools:       make(map[string]Tool, len(tools)),
+		definitions: make(map[string]Definition, len(tools)),
+		order:       make([]string, 0, len(tools)),
 	}
 
 	for _, candidate := range tools {
@@ -47,11 +49,12 @@ func (r *Registry) Register(candidate Tool) error {
 	}
 
 	r.tools[definition.Name] = candidate
+	r.definitions[definition.Name] = definition
 	r.order = append(r.order, definition.Name)
 	return nil
 }
 
-// Definitions returns tool schemas in registration order.
+// Definitions returns tool definitions in registration order.
 func (r *Registry) Definitions() []Definition {
 	if r == nil {
 		return nil
@@ -59,7 +62,7 @@ func (r *Registry) Definitions() []Definition {
 
 	definitions := make([]Definition, 0, len(r.order))
 	for _, name := range r.order {
-		definitions = append(definitions, r.tools[name].Definition())
+		definitions = append(definitions, r.definitions[name])
 	}
 	return definitions
 }

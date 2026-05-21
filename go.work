@@ -1,5 +1,7 @@
-go 1.24.6
+go 1.25.0
 
 use ./apps/fake-uit-server
 
 use ./apps/agent
+
+use ./apps/mock-mcp-server

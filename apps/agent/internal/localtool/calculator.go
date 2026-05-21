@@ -21,26 +21,22 @@ func (t *Calculator) Definition() tool.Definition {
 	return tool.Definition{
 		Name:        "calculator",
 		Description: "Run a basic arithmetic operation on two numbers.",
-		InputSchema: map[string]any{
-			"type":                 "object",
-			"additionalProperties": false,
-			"properties": map[string]any{
-				"operation": map[string]any{
-					"type":        "string",
-					"description": "The arithmetic operation to run.",
-					"enum":        []string{"add", "subtract", "multiply", "divide"},
-				},
-				"a": map[string]any{
-					"type":        "number",
-					"description": "The left operand.",
-				},
-				"b": map[string]any{
-					"type":        "number",
-					"description": "The right operand.",
-				},
+		InputSchema: tool.ObjectSchema(
+			map[string]any{
+				"operation": tool.StringEnumProperty(
+					"The arithmetic operation to run.",
+					"add",
+					"subtract",
+					"multiply",
+					"divide",
+				),
+				"a": tool.NumberProperty("The left operand."),
+				"b": tool.NumberProperty("The right operand."),
 			},
-			"required": []string{"operation", "a", "b"},
-		},
+			"operation",
+			"a",
+			"b",
+		),
 	}
 }
 

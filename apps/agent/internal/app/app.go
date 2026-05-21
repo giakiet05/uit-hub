@@ -40,6 +40,8 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		"openai_base_url", cfg.OpenAI.BaseURL,
 		"agent_max_rounds", cfg.Agent.MaxRounds,
 		"agent_tool_timeout", cfg.Agent.ToolTimeout.String(),
+		"mcp_config_path", cfg.MCP.ConfigPath,
+		"mcp_server_count", len(cfg.MCP.Servers),
 	)
 	logger.DebugContext(ctx, "Starting agent app", "llm_provider", cfg.Provider)
 
@@ -50,11 +52,12 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 
 	session := runtime.NewSession()
 	prompts := prompt.NewBuilder(prompt.DefaultSystemPrompt())
-	tools, err := newToolRegistry()
+	tools, closers, err := newToolRegistry(ctx, cfg, logger)
 	if err != nil {
 		logger.DebugContext(ctx, "Tool registry initialization failed", "error", err)
 		return err
 	}
+	defer closeAll(ctx, logger, closers)
 	logger.DebugContext(ctx, "Tool registry initialized", "tool_count", len(tools.Definitions()))
 
 	runtimeAgent := agent.NewReActAgent(agent.ReActConfig{
