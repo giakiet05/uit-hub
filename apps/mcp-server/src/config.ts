@@ -7,5 +7,5 @@ dotenv.config({ path: resolve(__dirname, '../../.env') }); // Dùng chung .env c
 
 export const config = {
   // Fake UIT Server Base URL
-  apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:8080/api/v1',
+  apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:3000/api/v1',
 };

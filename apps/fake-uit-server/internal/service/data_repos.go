@@ -1,0 +1,147 @@
+package service
+
+import (
+	"github.com/giakiet05/uit-hub/apps/fake-uit-server/internal/model"
+)
+
+type Repos struct {
+	Students      StudentRepo
+	Courses       CourseRepo
+	Enrollments   EnrollmentRepo
+	Schedules     ScheduleRepo
+	ExamSchedules ExamScheduleRepo
+	Scores        ScoreRepo
+	Assignments   AssignmentRepo
+	Materials     MaterialRepo
+	Deadlines     DeadlineRepo
+	Rooms         RoomRepo
+	RoomBookings  RoomBookingRepo
+	Submissions   SubmissionRepo
+	Requests      RequestRepo
+	Contacts      ContactRepo
+}
+
+func NewRepos(store *Store) Repos {
+	return Repos{
+		Students:      StudentRepository{store: store},
+		Courses:       CourseRepository{store: store},
+		Enrollments:   EnrollmentRepository{store: store},
+		Schedules:     ScheduleRepository{store: store},
+		ExamSchedules: ExamScheduleRepository{store: store},
+		Scores:        ScoreRepository{store: store},
+		Assignments:   AssignmentRepository{store: store},
+		Materials:     MaterialRepository{store: store},
+		Deadlines:     DeadlineRepository{store: store},
+		Rooms:         RoomRepository{store: store},
+		RoomBookings:  RoomBookingRepository{store: store},
+		Submissions:   SubmissionRepository{store: store},
+		Requests:      RequestRepository{store: store},
+		Contacts:      ContactRepository{store: store},
+	}
+}
+
+type StudentRepository struct{ store *Store }
+
+type CourseRepository struct{ store *Store }
+
+type EnrollmentRepository struct{ store *Store }
+
+type ScheduleRepository struct{ store *Store }
+
+type ExamScheduleRepository struct{ store *Store }
+
+type ScoreRepository struct{ store *Store }
+
+type AssignmentRepository struct{ store *Store }
+
+type MaterialRepository struct{ store *Store }
+
+type DeadlineRepository struct{ store *Store }
+
+type RoomRepository struct{ store *Store }
+
+type RoomBookingRepository struct{ store *Store }
+
+type SubmissionRepository struct{ store *Store }
+
+type RequestRepository struct{ store *Store }
+
+type ContactRepository struct{ store *Store }
+
+func (r StudentRepository) List() ([]model.Student, error) {
+	return r.store.Students(), nil
+}
+
+func (r StudentRepository) FindByID(id string) (*model.Student, bool, error) {
+	student, ok := r.store.FindStudentByID(id)
+	return student, ok, nil
+}
+
+func (r CourseRepository) FindByID(id string) (*model.Course, bool, error) {
+	course, ok := r.store.FindCourseByID(id)
+	return course, ok, nil
+}
+
+func (r EnrollmentRepository) List() ([]model.Enrollment, error) {
+	return r.store.Enrollments(), nil
+}
+
+func (r ScheduleRepository) List() ([]model.Schedule, error) {
+	return r.store.Schedules(), nil
+}
+
+func (r ExamScheduleRepository) List() ([]model.ExamSchedule, error) {
+	return r.store.ExamSchedules(), nil
+}
+
+func (r ScoreRepository) List() ([]model.Score, error) {
+	return r.store.Scores(), nil
+}
+
+func (r AssignmentRepository) List() ([]model.Assignment, error) {
+	return r.store.Assignments(), nil
+}
+
+func (r AssignmentRepository) FindByID(id string) (*model.Assignment, bool, error) {
+	assignment, ok := r.store.FindAssignmentByID(id)
+	return assignment, ok, nil
+}
+
+func (r MaterialRepository) List() ([]model.Material, error) {
+	return r.store.Materials(), nil
+}
+
+func (r DeadlineRepository) List() ([]model.Deadline, error) {
+	return r.store.Deadlines(), nil
+}
+
+func (r RoomRepository) List() ([]model.Room, error) {
+	return r.store.Rooms(), nil
+}
+
+func (r RoomBookingRepository) List() ([]model.RoomBooking, error) {
+	return r.store.RoomBookings(), nil
+}
+
+func (r SubmissionRepository) Create(submission model.Submission) error {
+	r.store.AddSubmission(submission)
+	return nil
+}
+
+func (r SubmissionRepository) Count() (int, error) {
+	return r.store.SubmissionCount(), nil
+}
+
+func (r RequestRepository) Create(request model.Request) error {
+	r.store.AddRequest(request)
+	return nil
+}
+
+func (r ContactRepository) Create(contact model.Contact) error {
+	r.store.AddContact(contact)
+	return nil
+}
+
+func (r ContactRepository) Count() (int, error) {
+	return r.store.ContactCount(), nil
+}
