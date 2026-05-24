@@ -69,3 +69,21 @@ func TestLoadUsesEmptyMCPConfigWhenFileIsMissing(t *testing.T) {
 		t.Fatalf("len(Servers) = %d, want 0", len(cfg.MCP.Servers))
 	}
 }
+
+func TestLoadReadsMemoryConfig(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("MEMORY_ENABLED", "false")
+	t.Setenv("MEMORY_PATH", "custom-memory")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Memory.Enabled {
+		t.Fatal("Memory.Enabled = true, want false")
+	}
+	if cfg.Memory.Path != "custom-memory" {
+		t.Fatalf("Memory.Path = %q, want custom-memory", cfg.Memory.Path)
+	}
+}

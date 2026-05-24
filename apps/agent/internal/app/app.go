@@ -9,6 +9,7 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/memory"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tui"
@@ -40,6 +41,8 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		"openai_base_url", cfg.OpenAI.BaseURL,
 		"agent_max_rounds", cfg.Agent.MaxRounds,
 		"agent_tool_timeout", cfg.Agent.ToolTimeout.String(),
+		"memory_path", cfg.Memory.Path,
+		"tool_runtime_limit", cfg.Tool.RuntimeLimit,
 		"mcp_config_path", cfg.MCP.ConfigPath,
 		"mcp_server_count", len(cfg.MCP.Servers),
 	)
@@ -51,8 +54,16 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	}
 
 	session := runtime.NewSession()
-	prompts := prompt.NewBuilder(prompt.DefaultSystemPrompt())
-	tools, closers, err := newToolRegistry(ctx, cfg, logger)
+	memoryStore := newMemoryStore(cfg)
+	memoryContext := memory.Context{}
+
+	memoryContext, err = memory.NewLoader(memoryStore).Load(ctx)
+	if err != nil {
+		logger.DebugContext(ctx, "Memory context load failed", "error", err)
+		return err
+	}
+	promptBuilder := prompt.NewBuilder(newSessionPrompt(memoryContext))
+	tools, closers, err := newToolSet(ctx, cfg, logger, memoryStore)
 	if err != nil {
 		logger.DebugContext(ctx, "Tool registry initialization failed", "error", err)
 		return err
@@ -60,14 +71,14 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	defer closeAll(ctx, logger, closers)
 	logger.DebugContext(ctx, "Tool registry initialized", "tool_count", len(tools.Definitions()))
 
-	runtimeAgent := agent.NewReActAgent(agent.ReActConfig{
-		Provider:    provider,
-		Prompts:     prompts,
-		Tools:       tools,
-		Logger:      logger,
-		MaxRounds:   cfg.Agent.MaxRounds,
-		ToolTimeout: cfg.Agent.ToolTimeout,
-	})
+	runtimeAgent := agent.NewReActAgent(
+		provider,
+		agent.WithPromptBuilder(promptBuilder),
+		agent.WithTools(tools),
+		agent.WithLogger(logger),
+		agent.WithMaxRounds(cfg.Agent.MaxRounds),
+		agent.WithToolTimeout(cfg.Agent.ToolTimeout),
+	)
 
 	runner := tui.NewRunner(session, runtimeAgent, stdin, stdout, logBuffer, initialPrompt)
 	if err := runner.Run(ctx); err != nil {

@@ -21,11 +21,11 @@ import (
 )
 
 func TestReActAgentRunsProvider(t *testing.T) {
-	agent := NewReActAgent(ReActConfig{
-		Provider: echoTestProvider{},
-		Prompts:  newTestPromptBuilder(),
-		Logger:   logging.NewNopLogger(),
-	})
+	agent := NewReActAgent(
+		echoTestProvider{},
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithLogger(logging.NewNopLogger()),
+	)
 	session := runtime.NewSession()
 
 	message := runAgentForAnswer(t, agent, session, "xin chao")
@@ -37,11 +37,11 @@ func TestReActAgentRunsProvider(t *testing.T) {
 
 func TestReActAgentSendsSystemPromptWithoutStoringItInConversation(t *testing.T) {
 	provider := &captureMessagesProvider{}
-	agent := NewReActAgent(ReActConfig{
-		Provider: provider,
-		Prompts:  newTestPromptBuilder(),
-		Logger:   logging.NewNopLogger(),
-	})
+	agent := NewReActAgent(
+		provider,
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithLogger(logging.NewNopLogger()),
+	)
 	session := runtime.NewSession()
 
 	_ = runAgentForAnswer(t, agent, session, "xin chao")
@@ -64,11 +64,11 @@ func TestReActAgentLogsRunStats(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
-	agent := NewReActAgent(ReActConfig{
-		Provider: usageProvider{},
-		Prompts:  newTestPromptBuilder(),
-		Logger:   logger,
-	})
+	agent := NewReActAgent(
+		usageProvider{},
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithLogger(logger),
+	)
 	session := runtime.NewSession()
 
 	_ = runAgentForAnswer(t, agent, session, "track stats")
@@ -91,21 +91,21 @@ func TestReActAgentLogsRunStats(t *testing.T) {
 }
 
 func TestReActAgentLogsTimeline(t *testing.T) {
-	registry, err := tool.NewRegistry(localtool.NewEcho())
+	registry, err := tool.NewBaseRegistry(localtool.NewEcho())
 	if err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
+		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
 
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
-	agent := NewReActAgent(ReActConfig{
-		Provider: &timelineProvider{},
-		Prompts:  newTestPromptBuilder(),
-		Tools:    registry,
-		Logger:   logger,
-	})
+	agent := NewReActAgent(
+		&timelineProvider{},
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithTools(newTestToolSet(registry)),
+		WithLogger(logger),
+	)
 	session := runtime.NewSession()
 
 	_ = runAgentForAnswer(t, agent, session, "track timeline")
@@ -131,18 +131,18 @@ func TestReActAgentLogsTimeline(t *testing.T) {
 }
 
 func TestReActAgentHidesRawToolErrorsFromObservation(t *testing.T) {
-	registry, err := tool.NewRegistry(errorTool{})
+	registry, err := tool.NewBaseRegistry(errorTool{})
 	if err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
+		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
 
 	provider := &toolErrorProvider{}
-	agent := NewReActAgent(ReActConfig{
-		Provider: provider,
-		Prompts:  newTestPromptBuilder(),
-		Tools:    registry,
-		Logger:   logging.NewNopLogger(),
-	})
+	agent := NewReActAgent(
+		provider,
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithTools(newTestToolSet(registry)),
+		WithLogger(logging.NewNopLogger()),
+	)
 	session := runtime.NewSession()
 
 	message := runAgentForAnswer(t, agent, session, "test failing tool")
@@ -159,19 +159,19 @@ func TestReActAgentHidesRawToolErrorsFromObservation(t *testing.T) {
 }
 
 func TestReActAgentTimesOutToolCalls(t *testing.T) {
-	registry, err := tool.NewRegistry(blockingTool{})
+	registry, err := tool.NewBaseRegistry(blockingTool{})
 	if err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
+		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
 
 	provider := &toolTimeoutProvider{}
-	agent := NewReActAgent(ReActConfig{
-		Provider:    provider,
-		Prompts:     newTestPromptBuilder(),
-		Tools:       registry,
-		Logger:      logging.NewNopLogger(),
-		ToolTimeout: time.Millisecond,
-	})
+	agent := NewReActAgent(
+		provider,
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithTools(newTestToolSet(registry)),
+		WithLogger(logging.NewNopLogger()),
+		WithToolTimeout(time.Millisecond),
+	)
 	session := runtime.NewSession()
 
 	message := runAgentForAnswer(t, agent, session, "test slow tool")
@@ -185,7 +185,7 @@ func TestReActAgentTimesOutToolCalls(t *testing.T) {
 }
 
 func TestReActAgentExecutesToolCalls(t *testing.T) {
-	registry, err := tool.NewRegistry(
+	registry, err := tool.NewBaseRegistry(
 		localtool.NewEcho(),
 		localtool.NewCalculator(),
 		localtool.NewCurrentTimeWithClock(func() time.Time {
@@ -193,16 +193,16 @@ func TestReActAgentExecutesToolCalls(t *testing.T) {
 		}),
 	)
 	if err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
+		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
 
 	provider := &scriptedToolProvider{}
-	agent := NewReActAgent(ReActConfig{
-		Provider: provider,
-		Prompts:  newTestPromptBuilder(),
-		Tools:    registry,
-		Logger:   logging.NewNopLogger(),
-	})
+	agent := NewReActAgent(
+		provider,
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithTools(newTestToolSet(registry)),
+		WithLogger(logging.NewNopLogger()),
+	)
 	session := runtime.NewSession()
 
 	message := runAgentForAnswer(t, agent, session, "test tools")
@@ -216,21 +216,21 @@ func TestReActAgentExecutesToolCalls(t *testing.T) {
 }
 
 func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
-	registry, err := tool.NewRegistry(
+	registry, err := tool.NewBaseRegistry(
 		localtool.NewEcho(),
 		localtool.NewCalculator(),
 	)
 	if err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
+		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
 
 	provider := &multiRoundToolProvider{}
-	agent := NewReActAgent(ReActConfig{
-		Provider: provider,
-		Prompts:  newTestPromptBuilder(),
-		Tools:    registry,
-		Logger:   logging.NewNopLogger(),
-	})
+	agent := NewReActAgent(
+		provider,
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithTools(newTestToolSet(registry)),
+		WithLogger(logging.NewNopLogger()),
+	)
 	session := runtime.NewSession()
 
 	message := runAgentForAnswer(t, agent, session, "multi round")
@@ -247,17 +247,17 @@ func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
 }
 
 func TestReActAgentEmitsToolEvents(t *testing.T) {
-	registry, err := tool.NewRegistry(localtool.NewEcho())
+	registry, err := tool.NewBaseRegistry(localtool.NewEcho())
 	if err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
+		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
 
-	agent := NewReActAgent(ReActConfig{
-		Provider: &timelineProvider{},
-		Prompts:  newTestPromptBuilder(),
-		Tools:    registry,
-		Logger:   logging.NewNopLogger(),
-	})
+	agent := NewReActAgent(
+		&timelineProvider{},
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithTools(newTestToolSet(registry)),
+		WithLogger(logging.NewNopLogger()),
+	)
 	session := runtime.NewSession()
 
 	events := collectAgentEvents(t, agent.Run(context.Background(), session, "track events"))
@@ -276,18 +276,18 @@ func TestReActAgentEmitsToolEvents(t *testing.T) {
 }
 
 func TestReActAgentEmitsMaxRounds(t *testing.T) {
-	registry, err := tool.NewRegistry(localtool.NewEcho())
+	registry, err := tool.NewBaseRegistry(localtool.NewEcho())
 	if err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
+		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
 
-	agent := NewReActAgent(ReActConfig{
-		Provider:  &timelineProvider{},
-		Prompts:   newTestPromptBuilder(),
-		Tools:     registry,
-		Logger:    logging.NewNopLogger(),
-		MaxRounds: 1,
-	})
+	agent := NewReActAgent(
+		&timelineProvider{},
+		WithPromptBuilder(newTestPromptBuilder()),
+		WithTools(newTestToolSet(registry)),
+		WithLogger(logging.NewNopLogger()),
+		WithMaxRounds(1),
+	)
 	session := runtime.NewSession()
 
 	events := collectAgentEvents(t, agent.Run(context.Background(), session, "hit max rounds"))
@@ -620,7 +620,11 @@ func countToolResults(messages []conversation.Message) int {
 }
 
 func newTestPromptBuilder() *prompt.Builder {
-	return prompt.NewBuilder(prompt.SystemPrompt{
-		SessionText: "system",
+	return prompt.NewBuilder(prompt.SessionPrompt{
+		DynamicParts: []prompt.DynamicPart{"system"},
 	})
+}
+
+func newTestToolSet(registry *tool.BaseRegistry) *tool.ToolSet {
+	return tool.NewToolSet(registry, tool.NewRuntimeRegistry(20))
 }

@@ -16,6 +16,20 @@ func stringArg(arguments map[string]any, name string) (string, error) {
 	return text, nil
 }
 
+// optionalStringArg reads an optional string argument from a tool call.
+func optionalStringArg(arguments map[string]any, name string) (string, error) {
+	value, exists := arguments[name]
+	if !exists || value == nil {
+		return "", nil
+	}
+
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("argument %q must be a string", name)
+	}
+	return text, nil
+}
+
 // numberArg reads a required numeric argument from a tool call.
 func numberArg(arguments map[string]any, name string) (float64, error) {
 	value, exists := arguments[name]

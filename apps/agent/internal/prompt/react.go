@@ -5,9 +5,7 @@ import _ "embed"
 //go:embed templates/react_system.md
 var reActStableSystemPrompt string
 
-// ReActSystemPrompt returns the agent-specific stable prompt for ReAct.
-func ReActSystemPrompt() SystemPrompt {
-	return SystemPrompt{
-		StableText: reActStableSystemPrompt,
-	}
+// ReActStaticPrompt returns the agent-specific static prompt for ReAct.
+func ReActStaticPrompt() StaticPart {
+	return StaticPart(reActStableSystemPrompt)
 }

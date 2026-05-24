@@ -3,73 +3,78 @@ package prompt
 import "strings"
 
 const (
-	sessionContextHeader  = "=== SESSION CONTEXT ==="
+	dynamicContextHeader  = "=== DYNAMIC CONTEXT ==="
 	uncachedContextHeader = "=== UNCACHED CONTEXT ==="
 )
 
-// SystemPrompt groups prompt text by cache stability.
-type SystemPrompt struct {
-	StableText  string
-	SessionText string
-	Uncached    []UncachedSystemPrompt
+// StaticPart is prompt text that should stay stable for every runtime session.
+type StaticPart string
+
+// DynamicPart is session-scoped prompt text loaded at session start.
+type DynamicPart string
+
+// UncachedPart is volatile prompt text built for one LLM call.
+type UncachedPart string
+
+// SessionPrompt contains prompt parts stable for one runtime session.
+type SessionPrompt struct {
+	StaticParts  []StaticPart
+	DynamicParts []DynamicPart
 }
 
-// UncachedSystemPrompt is a prompt block that should not participate in global
-// cache scope. Reason documents why this block is volatile.
-type UncachedSystemPrompt struct {
-	Text   string
-	Reason string
+// CallPrompt contains one LLM-call prompt: session-stable prompt plus volatile
+// per-call context.
+type CallPrompt struct {
+	Session       SessionPrompt
+	UncachedParts []UncachedPart
 }
 
-// Render converts the structured prompt into one system prompt string.
-func (p SystemPrompt) Render() string {
+// Render converts one call prompt into the final system prompt text.
+func (p CallPrompt) Render() string {
 	parts := make([]string, 0, 3)
 
-	if text := strings.TrimSpace(p.StableText); text != "" {
+	if text := renderStaticParts(p.Session.StaticParts); text != "" {
 		parts = append(parts, text)
 	}
-	if text := strings.TrimSpace(p.SessionText); text != "" {
-		parts = append(parts, sessionContextHeader+"\n\n"+text)
+	if text := renderDynamicParts(p.Session.DynamicParts); text != "" {
+		parts = append(parts, dynamicContextHeader+"\n\n"+text)
 	}
-	if text := renderUncached(p.Uncached); text != "" {
+	if text := renderUncachedParts(p.UncachedParts); text != "" {
 		parts = append(parts, uncachedContextHeader+"\n\n"+text)
 	}
 
 	return strings.Join(parts, "\n\n")
 }
 
-// Merge returns a prompt where non-empty fields from next are appended after
-// the current prompt fields in their matching stability tier.
-func (p SystemPrompt) Merge(next SystemPrompt) SystemPrompt {
-	return SystemPrompt{
-		StableText:  joinPromptText(p.StableText, next.StableText),
-		SessionText: joinPromptText(p.SessionText, next.SessionText),
-		Uncached:    append(append([]UncachedSystemPrompt{}, p.Uncached...), next.Uncached...),
-	}
-}
-
-func renderUncached(blocks []UncachedSystemPrompt) string {
-	parts := make([]string, 0, len(blocks))
-	for _, block := range blocks {
-		text := strings.TrimSpace(block.Text)
-		if text == "" {
-			continue
+// renderStaticParts joins static prompt parts while skipping empty parts.
+func renderStaticParts(parts []StaticPart) string {
+	texts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if text := strings.TrimSpace(string(part)); text != "" {
+			texts = append(texts, text)
 		}
-		parts = append(parts, text)
 	}
-	return strings.Join(parts, "\n\n")
+	return strings.Join(texts, "\n\n")
 }
 
-func joinPromptText(left string, right string) string {
-	left = strings.TrimSpace(left)
-	right = strings.TrimSpace(right)
-
-	switch {
-	case left == "":
-		return right
-	case right == "":
-		return left
-	default:
-		return left + "\n\n" + right
+// renderDynamicParts joins dynamic prompt parts while skipping empty parts.
+func renderDynamicParts(parts []DynamicPart) string {
+	texts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if text := strings.TrimSpace(string(part)); text != "" {
+			texts = append(texts, text)
+		}
 	}
+	return strings.Join(texts, "\n\n")
+}
+
+// renderUncachedParts joins volatile prompt parts while skipping empty parts.
+func renderUncachedParts(parts []UncachedPart) string {
+	texts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if text := strings.TrimSpace(string(part)); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	return strings.Join(texts, "\n\n")
 }

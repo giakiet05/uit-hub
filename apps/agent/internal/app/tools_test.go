@@ -10,9 +10,10 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/memory"
 )
 
-func TestNewToolRegistryRegistersMockMCPTools(t *testing.T) {
+func TestNewToolSetRegistersMockMCPTools(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping MCP stdio integration smoke test in short mode")
 	}
@@ -21,7 +22,7 @@ func TestNewToolRegistryRegistersMockMCPTools(t *testing.T) {
 	defer cancel()
 
 	repoRoot := filepath.Clean("../../../..")
-	registry, closers, err := newToolRegistry(ctx, config.Config{
+	toolSet, closers, err := newToolSet(ctx, config.Config{
 		Provider: llm.ProviderTypeOpenAI,
 		MCP: config.MCPConfig{
 			ClientName:    "uit-hub-agent-test",
@@ -36,14 +37,14 @@ func TestNewToolRegistryRegistersMockMCPTools(t *testing.T) {
 				},
 			},
 		},
-	}, logging.NewNopLogger())
+	}, logging.NewNopLogger(), nil)
 	if err != nil {
-		t.Fatalf("newToolRegistry() error = %v", err)
+		t.Fatalf("newToolSet() error = %v", err)
 	}
 	defer closeAll(ctx, logging.NewNopLogger(), closers)
 
 	names := []string{}
-	for _, definition := range registry.Definitions() {
+	for _, definition := range toolSet.Definitions() {
 		names = append(names, definition.Name)
 	}
 
@@ -55,6 +56,33 @@ func TestNewToolRegistryRegistersMockMCPTools(t *testing.T) {
 		"mock_uit__delete_student_note",
 		"mock_uit__submit_leave_request",
 	} {
+		if !slices.Contains(names, want) {
+			t.Fatalf("registered tools missing %q: %v", want, names)
+		}
+	}
+}
+
+func TestNewToolSetRegistersMemoryTools(t *testing.T) {
+	ctx := context.Background()
+
+	toolSet, closers, err := newToolSet(ctx, config.Config{
+		Provider: llm.ProviderTypeOpenAI,
+		Memory: config.MemoryConfig{
+			Enabled: true,
+			Path:    t.TempDir(),
+		},
+	}, logging.NewNopLogger(), memory.NewFileStore(t.TempDir()))
+	if err != nil {
+		t.Fatalf("newToolSet() error = %v", err)
+	}
+	defer closeAll(ctx, logging.NewNopLogger(), closers)
+
+	names := []string{}
+	for _, definition := range toolSet.Definitions() {
+		names = append(names, definition.Name)
+	}
+
+	for _, want := range []string{"memory_list", "memory_read", "memory_write"} {
 		if !slices.Contains(names, want) {
 			t.Fatalf("registered tools missing %q: %v", want, names)
 		}
