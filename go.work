@@ -1,3 +1,6 @@
-go 1.24.6
+go 1.26.1
 
-use ./apps/fake-uit-server
+use (
+	./apps/fake-uit-server
+	./apps/mcp-server
+)
