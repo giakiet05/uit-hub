@@ -15,14 +15,26 @@ import (
 type Config struct {
 	Provider llm.ProviderType
 	Agent    AgentConfig
+	Memory   MemoryConfig
 	MCP      MCPConfig
 	OpenAI   OpenAIConfig
+	Tool     ToolConfig
 }
 
 // AgentConfig contains agent loop limits.
 type AgentConfig struct {
 	MaxRounds   int
 	ToolTimeout time.Duration
+}
+
+// MemoryConfig contains long-term memory settings.
+type MemoryConfig struct {
+	Path string
+}
+
+// ToolConfig contains tool registry settings.
+type ToolConfig struct {
+	RuntimeLimit int
 }
 
 // OpenAIConfig contains settings for the OpenAI LLM provider.
@@ -50,7 +62,13 @@ func Load() (Config, error) {
 			MaxRounds:   envIntOrDefault("AGENT_MAX_ROUNDS", 0),
 			ToolTimeout: envDurationOrDefault("AGENT_TOOL_TIMEOUT", 15*time.Second),
 		},
+		Memory: MemoryConfig{
+			Path: envOrDefault("MEMORY_PATH", "memory"),
+		},
 		MCP: mcpConfig,
+		Tool: ToolConfig{
+			RuntimeLimit: envIntOrDefault("TOOL_RUNTIME_LIMIT", 20),
+		},
 		OpenAI: OpenAIConfig{
 			APIKey:  strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
 			Model:   envOrDefault("OPENAI_MODEL", "gpt-5.4-mini"),

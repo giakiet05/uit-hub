@@ -10,6 +10,7 @@
 .env.*
 !.env.example
 apps/agent/mcp.yaml
+apps/agent/memory/
 
 
 

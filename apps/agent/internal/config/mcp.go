@@ -20,11 +20,13 @@ type MCPConfig struct {
 
 // MCPServerConfig contains settings for one MCP stdio server.
 type MCPServerConfig struct {
-	Name      string
-	Transport string
-	Command   string
-	Args      []string
-	WorkDir   string
+	Name        string
+	Description string
+	Transport   string
+	Command     string
+	Args        []string
+	Env         []string
+	WorkDir     string
 }
 
 type mcpConfigFile struct {
@@ -38,11 +40,13 @@ type mcpClientConfigFile struct {
 }
 
 type mcpServerConfigFile struct {
-	Name      string   `yaml:"name"`
-	Transport string   `yaml:"transport"`
-	Command   string   `yaml:"command"`
-	Args      []string `yaml:"args"`
-	WorkDir   string   `yaml:"workdir"`
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description"`
+	Transport   string   `yaml:"transport"`
+	Command     string   `yaml:"command"`
+	Args        []string `yaml:"args"`
+	Env         []string `yaml:"env"`
+	WorkDir     string   `yaml:"workdir"`
 }
 
 func loadMCPConfig(path string) (MCPConfig, error) {
@@ -86,11 +90,13 @@ func loadMCPConfig(path string) (MCPConfig, error) {
 			transport = "stdio"
 		}
 		cfg.Servers = append(cfg.Servers, MCPServerConfig{
-			Name:      name,
-			Transport: transport,
-			Command:   command,
-			Args:      server.Args,
-			WorkDir:   strings.TrimSpace(server.WorkDir),
+			Name:        name,
+			Description: strings.TrimSpace(server.Description),
+			Transport:   transport,
+			Command:     command,
+			Args:        server.Args,
+			Env:         server.Env,
+			WorkDir:     strings.TrimSpace(server.WorkDir),
 		})
 	}
 

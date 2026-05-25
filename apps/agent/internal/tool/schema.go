@@ -15,6 +15,9 @@ func ObjectSchema(properties map[string]any, required ...string) JSONSchema {
 	if properties == nil {
 		properties = map[string]any{}
 	}
+	if required == nil {
+		required = []string{}
+	}
 	return JSONSchema{
 		"type":                 "object",
 		"additionalProperties": false,
