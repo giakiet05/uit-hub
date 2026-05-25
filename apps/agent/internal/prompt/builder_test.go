@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/mcpadapter"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/memory"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
 )
@@ -108,5 +109,37 @@ func TestMemoryDynamicPromptSkipsEmptyContext(t *testing.T) {
 
 	if dynamicPrompt != "" {
 		t.Fatalf("MemoryDynamicPrompt() = %q, want empty", dynamicPrompt)
+	}
+}
+
+func TestMCPToolCatalogDynamicPrompt(t *testing.T) {
+	dynamicPrompt := prompt.MCPToolCatalogDynamicPrompt([]mcpadapter.ToolMetadata{
+		{
+			Name:              "uit__get_student",
+			ServerName:        "uit",
+			ServerDescription: "UIT academic server.",
+			Description:       "Read student profile.",
+		},
+	})
+
+	text := string(dynamicPrompt)
+	for _, want := range []string{
+		"## MCP Tool Catalog",
+		"### uit",
+		"UIT academic server.",
+		"Use load_mcp_tool",
+		"uit__get_student: Read student profile.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("catalog prompt missing %q in %q", want, text)
+		}
+	}
+}
+
+func TestMCPToolCatalogDynamicPromptSkipsEmptyCatalog(t *testing.T) {
+	dynamicPrompt := prompt.MCPToolCatalogDynamicPrompt(nil)
+
+	if dynamicPrompt != "" {
+		t.Fatalf("MCPToolCatalogDynamicPrompt() = %q, want empty", dynamicPrompt)
 	}
 }

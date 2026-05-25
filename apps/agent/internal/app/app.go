@@ -62,14 +62,14 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		logger.DebugContext(ctx, "Memory context load failed", "error", err)
 		return err
 	}
-	promptBuilder := prompt.NewBuilder(newSessionPrompt(memoryContext))
-	tools, closers, err := newToolSet(ctx, cfg, logger, memoryStore)
+	tools, mcpManager, closers, err := newToolSet(ctx, cfg, logger, memoryStore)
 	if err != nil {
 		logger.DebugContext(ctx, "Tool registry initialization failed", "error", err)
 		return err
 	}
 	defer closeAll(ctx, logger, closers)
 	logger.DebugContext(ctx, "Tool registry initialized", "tool_count", len(tools.Definitions()))
+	promptBuilder := prompt.NewBuilder(newSessionPrompt(memoryContext, mcpManager.Catalog()))
 
 	runtimeAgent := agent.NewReActAgent(
 		provider,
