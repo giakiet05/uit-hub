@@ -14,7 +14,7 @@ func RegisterAuth(s *server.MCPServer, c *client.Client) {
 	// ── auth_login ──────────────────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("auth_login",
-			mcp.WithDescription("Đăng nhập bằng MSSV và mật khẩu, trả về token. Gọi khi cần xác thực."),
+			mcp.WithDescription("Đăng nhập bằng MSSV và mật khẩu, trả về token. Gọi khi cần xác thực. Đọc dữ liệu."),
 			mcp.WithString("student_id",
 				mcp.Required(),
 				mcp.Description("Mã số sinh viên"),

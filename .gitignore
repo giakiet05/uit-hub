@@ -9,8 +9,9 @@
 .env
 .env.*
 !.env.example
-.agents
-.gitnexus
+apps/agent/mcp.yaml
+apps/agent/memory/
+
 
 
 # Go
@@ -18,31 +19,9 @@ bin/
 tmp/
 *.test
 coverage.out
+*.log
 
 # Local build artifacts
 apps/fake-uit-server/server
  
-node_modules
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-vendor/
-
-apps/mcp-server/mcp-server
-apps/mcp-server/bin/
-
-# Node (additional)
-node_modules/
-dist/
+TODO.md

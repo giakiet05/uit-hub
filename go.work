@@ -1,6 +1,16 @@
+<<<<<<< HEAD
 go 1.26.1
 
 use (
 	./apps/fake-uit-server
 	./apps/mcp-server
 )
+=======
+go 1.25.0
+
+use ./apps/fake-uit-server
+
+use ./apps/agent
+
+use ./apps/mock-mcp-server
+>>>>>>> origin/dev

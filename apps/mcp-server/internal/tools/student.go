@@ -24,7 +24,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── get_student_profile ─────────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("get_student_profile",
-			mcp.WithDescription("Lấy thông tin cá nhân của sinh viên đang đăng nhập (họ tên, MSSV, email, SĐT, ngành)."),
+			mcp.WithDescription("Lấy thông tin cá nhân của sinh viên đang đăng nhập (họ tên, MSSV, email, SĐT, ngành). Đọc dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -41,7 +41,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	s.AddTool(
 		mcp.NewTool("get_student_schedule",
 			append([]mcp.ToolOption{
-				mcp.WithDescription("Lấy thời khoá biểu (lịch học) của sinh viên theo năm và học kỳ."),
+				mcp.WithDescription("Lấy thời khoá biểu (lịch học) của sinh viên theo năm và học kỳ. Đọc dữ liệu."),
 			}, yearSemesterOpts()...)...,
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -63,7 +63,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	s.AddTool(
 		mcp.NewTool("get_exam_schedule",
 			append([]mcp.ToolOption{
-				mcp.WithDescription("Lấy lịch thi của sinh viên theo năm và học kỳ."),
+				mcp.WithDescription("Lấy lịch thi của sinh viên theo năm và học kỳ. Đọc dữ liệu."),
 			}, yearSemesterOpts()...)...,
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -84,7 +84,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── get_student_scores ──────────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("get_student_scores",
-			mcp.WithDescription("Lấy toàn bộ bảng điểm (giữa kỳ, cuối kỳ, tổng) của sinh viên."),
+			mcp.WithDescription("Lấy toàn bộ bảng điểm (giữa kỳ, cuối kỳ, tổng) của sinh viên. Đọc dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -100,7 +100,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── get_tuition_fee ─────────────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("get_tuition_fee",
-			mcp.WithDescription("Tra cứu học phí hiện tại của sinh viên (số tín chỉ, số tiền, trạng thái)."),
+			mcp.WithDescription("Tra cứu học phí hiện tại của sinh viên (số tín chỉ, số tiền, trạng thái). Đọc dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -116,7 +116,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── get_insurance ───────────────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("get_insurance",
-			mcp.WithDescription("Tra cứu thông tin bảo hiểm y tế của sinh viên."),
+			mcp.WithDescription("Tra cứu thông tin bảo hiểm y tế của sinh viên. Đọc dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -132,7 +132,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── get_enrolled_courses ────────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("get_enrolled_courses",
-			mcp.WithDescription("Lấy danh sách các môn học mà sinh viên đã và đang đăng ký."),
+			mcp.WithDescription("Lấy danh sách các môn học mà sinh viên đã và đang đăng ký. Đọc dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -148,7 +148,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── get_training_points ─────────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("get_training_points",
-			mcp.WithDescription("Tra cứu điểm rèn luyện của sinh viên (điểm, xếp loại)."),
+			mcp.WithDescription("Tra cứu điểm rèn luyện của sinh viên (điểm, xếp loại). Đọc dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -164,7 +164,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── get_survey_forms ────────────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("get_survey_forms",
-			mcp.WithDescription("Lấy danh sách phiếu khảo sát sinh viên cần hoàn thành."),
+			mcp.WithDescription("Lấy danh sách phiếu khảo sát sinh viên cần hoàn thành. Đọc dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 		),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -180,7 +180,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── create_transcript_request ───────────────────────────────
 	s.AddTool(
 		mcp.NewTool("create_transcript_request",
-			mcp.WithDescription("Đăng ký in bảng điểm. Trả về request_id và trạng thái."),
+			mcp.WithDescription("Đăng ký in bảng điểm. Trả về request_id và trạng thái. Ghi dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 			mcp.WithNumber("copies", mcp.Required(), mcp.Description("Số bản in (≥1)")),
 			mcp.WithString("language", mcp.Required(), mcp.Description("Ngôn ngữ bảng điểm"), mcp.Enum("VI", "EN")),
@@ -203,7 +203,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── create_tuition_extension ────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("create_tuition_extension",
-			mcp.WithDescription("Xin gia hạn nộp học phí. Trả về request_id và trạng thái."),
+			mcp.WithDescription("Xin gia hạn nộp học phí. Trả về request_id và trạng thái. Ghi dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 			mcp.WithNumber("year", mcp.Required(), mcp.Description("Năm học")),
 			mcp.WithNumber("semester", mcp.Required(), mcp.Description("Học kỳ")),
@@ -225,7 +225,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── create_monthly_parking ──────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("create_monthly_parking",
-			mcp.WithDescription("Đăng ký vé xe tháng. Trả về request_id."),
+			mcp.WithDescription("Đăng ký vé xe tháng. Trả về request_id. Ghi dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 			mcp.WithString("vehicle_type", mcp.Required(), mcp.Description("Loại xe"), mcp.Enum("MOTORBIKE", "CAR", "BICYCLE")),
 			mcp.WithString("plate_number", mcp.Required(), mcp.Description("Biển số xe")),
@@ -248,7 +248,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── create_graduate_request ─────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("create_graduate_request",
-			mcp.WithDescription("Đăng ký xét tốt nghiệp. Trả về request_id."),
+			mcp.WithDescription("Đăng ký xét tốt nghiệp. Trả về request_id. Ghi dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 			mcp.WithNumber("year", mcp.Required(), mcp.Description("Năm học")),
 			mcp.WithNumber("semester", mcp.Required(), mcp.Description("Học kỳ")),
@@ -271,7 +271,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── create_graduation_thesis_request ────────────────────────
 	s.AddTool(
 		mcp.NewTool("create_graduation_thesis_request",
-			mcp.WithDescription("Đăng ký khóa luận tốt nghiệp. Trả về request_id."),
+			mcp.WithDescription("Đăng ký khóa luận tốt nghiệp. Trả về request_id. Ghi dữ liệu."),
 			mcp.WithString("token", mcp.Required(), mcp.Description(tokenDesc)),
 			mcp.WithString("thesis_title", mcp.Required(), mcp.Description("Tên đề tài")),
 			mcp.WithString("advisor_name", mcp.Required(), mcp.Description("Tên giảng viên hướng dẫn")),
@@ -292,7 +292,7 @@ func RegisterStudent(s *server.MCPServer, c *client.Client) {
 	// ── create_contact ──────────────────────────────────────────
 	s.AddTool(
 		mcp.NewTool("create_contact",
-			mcp.WithDescription("Gửi form liên hệ/phản hồi tới trường. Không cần token."),
+			mcp.WithDescription("Gửi form liên hệ/phản hồi tới trường. Không cần token. Ghi dữ liệu."),
 			mcp.WithString("name", mcp.Required(), mcp.Description("Họ tên người gửi")),
 			mcp.WithString("email", mcp.Required(), mcp.Description("Email liên hệ")),
 			mcp.WithString("phone", mcp.Description("SĐT")),
