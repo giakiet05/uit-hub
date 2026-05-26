@@ -1,11 +1,7 @@
 package bootstrap
 
 import (
-<<<<<<< HEAD
 	"log"
-
-=======
->>>>>>> origin/dev
 	"github.com/giakiet05/uit-hub/apps/fake-uit-server/internal/config"
 	"github.com/giakiet05/uit-hub/apps/fake-uit-server/internal/controller"
 	"github.com/giakiet05/uit-hub/apps/fake-uit-server/internal/middleware"
@@ -22,7 +18,6 @@ func Init() (*gin.Engine, error) {
 		return config.NewConfig(), nil
 	})
 
-<<<<<<< HEAD
 	do.Provide(injector, func(i *do.Injector) (*service.Service, error) {
 		// Load fixture data
 		fixture, err := service.LoadFixture("default")
@@ -59,24 +54,6 @@ func Init() (*gin.Engine, error) {
 	do.Provide(injector, func(i *do.Injector) (*controller.UitController, error) {
 		svc := do.MustInvoke[*service.Service](i)
 		return controller.NewUitController(svc), nil
-=======
-	do.Provide(injector, func(i *do.Injector) (service.StudentService, error) {
-		return service.NewStudentService(), nil
-	})
-
-	do.Provide(injector, func(i *do.Injector) (service.AuthService, error) {
-		return service.NewAuthService(), nil
-	})
-
-	do.Provide(injector, func(i *do.Injector) (*controller.StudentController, error) {
-		studentService := do.MustInvoke[service.StudentService](i)
-		return controller.NewStudentController(studentService), nil
-	})
-
-	do.Provide(injector, func(i *do.Injector) (*controller.AuthController, error) {
-		authService := do.MustInvoke[service.AuthService](i)
-		return controller.NewAuthController(authService), nil
->>>>>>> origin/dev
 	})
 
 	router := gin.Default()
@@ -95,15 +72,8 @@ func registerRoutes(router *gin.Engine, injector *do.Injector) {
 	api := router.Group("/api/v1")
 	api.Use(middleware.Chaos(cfg.Chaos))
 
-<<<<<<< HEAD
 	svc := do.MustInvoke[*service.Service](injector)
 	ctrl := do.MustInvoke[*controller.UitController](injector)
 
 	route.RegisterUitRoutes(api, ctrl, svc)
-=======
-	authService := do.MustInvoke[service.AuthService](injector)
-
-	route.RegisterAuthRoutes(api, do.MustInvoke[*controller.AuthController](injector))
-	route.RegisterStudentRoutes(api, do.MustInvoke[*controller.StudentController](injector), authService)
->>>>>>> origin/dev
 }
