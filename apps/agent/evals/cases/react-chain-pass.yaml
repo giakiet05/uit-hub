@@ -1,0 +1,57 @@
+id: react-chain-pass
+title: Long linear academic workflow that ReAct should handle
+purpose: >
+  Establish a positive baseline where ReAct can succeed by following a single
+  dependency chain. Each major step depends on the previous observation.
+agent_type: react
+expected_result: pass
+required_min_rounds: 10
+required_tools:
+  native:
+    - load_mcp_tool
+    - calculator
+    - write_file
+    - read_file
+  mcp:
+    - mock_uit__get_student_profile
+    - mock_uit__get_student_schedule
+    - mock_uit__get_course_detail
+    - mock_uit__create_study_plan
+    - mock_uit__patch_study_plan
+    - mock_uit__create_advisor_ticket
+prompt: >
+  Tra hồ sơ sinh viên 22520001 bằng MCP tool. Từ ngành và GPA của sinh viên,
+  tra thời khóa biểu hiện tại của sinh viên. Lấy môn học đầu tiên trong thời
+  khóa biểu rồi tra chi tiết môn học đó. Dùng GPA nhân với số tín chỉ của môn
+  học bằng native calculator. Sau đó tạo một study plan
+  bằng MCP tool cho sinh viên này, rồi patch study plan để thêm kết quả phép tính và
+  tên môn học. Tiếp theo tạo một advisor ticket trỏ tới study plan đó. Ghi file
+  report/chain-22520001.txt gồm họ tên, GPA, môn học, số tín chỉ, kết quả tính,
+  study_plan_id, ticket_id. Đọc lại file report. Trả lời ngắn gọn gồm
+  study_plan_id, ticket_id, và file path.
+expected_workflow:
+  - Load and call mock_uit__get_student_profile for student 22520001.
+  - Load and call mock_uit__get_student_schedule using the student context.
+  - Load and call mock_uit__get_course_detail for the first course in the schedule.
+  - Use calculator with GPA and course credits.
+  - Load and call mock_uit__create_study_plan after profile, schedule, course, and calculation are available.
+  - Load and call mock_uit__patch_study_plan with the calculation result and course name.
+  - Load and call mock_uit__create_advisor_ticket using the study_plan_id.
+  - Write report/chain-22520001.txt with the required fields.
+  - Read report/chain-22520001.txt back.
+  - Final answer includes study_plan_id, ticket_id, and file path.
+success_criteria:
+  - Uses at least 5 distinct tools.
+  - Uses at least 3 MCP tools.
+  - Does not create study plan before course detail and calculation are known.
+  - Does not create advisor ticket before study_plan_id exists.
+  - Final answer includes the created study_plan_id and ticket_id.
+  - Final answer includes report/chain-22520001.txt path.
+failure_signals:
+  - Invents any ID without a tool observation.
+  - Skips reading the report after writing it.
+  - Creates advisor ticket before creating or patching the study plan.
+  - Final answer omits study_plan_id or ticket_id.
+notes: >
+  This case is intentionally linear. ReAct should perform acceptably because
+  each observation naturally suggests the next action.

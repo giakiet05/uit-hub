@@ -6,12 +6,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/memory"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tui"
 )
 
@@ -48,39 +44,13 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	)
 	logger.DebugContext(ctx, "Starting agent app", "llm_provider", cfg.Provider)
 
-	provider, err := newProvider(cfg, logger)
+	runtime, err := NewRuntime(ctx, cfg, logger)
 	if err != nil {
 		return err
 	}
+	defer runtime.Close(ctx)
 
-	session := runtime.NewSession()
-	memoryStore := newMemoryStore(cfg)
-	memoryContext := memory.Context{}
-
-	memoryContext, err = memory.NewLoader(memoryStore).Load(ctx)
-	if err != nil {
-		logger.DebugContext(ctx, "Memory context load failed", "error", err)
-		return err
-	}
-	tools, mcpManager, closers, err := newToolSet(ctx, cfg, logger, memoryStore)
-	if err != nil {
-		logger.DebugContext(ctx, "Tool registry initialization failed", "error", err)
-		return err
-	}
-	defer closeAll(ctx, logger, closers)
-	logger.DebugContext(ctx, "Tool registry initialized", "tool_count", len(tools.Definitions()))
-	promptBuilder := prompt.NewBuilder(newSessionPrompt(memoryContext, mcpManager.Catalog()))
-
-	runtimeAgent := agent.NewReActAgent(
-		provider,
-		agent.WithPromptBuilder(promptBuilder),
-		agent.WithTools(tools),
-		agent.WithLogger(logger),
-		agent.WithMaxRounds(cfg.Agent.MaxRounds),
-		agent.WithToolTimeout(cfg.Agent.ToolTimeout),
-	)
-
-	runner := tui.NewRunner(session, runtimeAgent, stdin, stdout, logBuffer, initialPrompt)
+	runner := tui.NewRunner(runtime.Session, runtime.Agent, stdin, stdout, logBuffer, initialPrompt)
 	if err := runner.Run(ctx); err != nil {
 		logger.DebugContext(ctx, "Agent TUI stopped with error", "error", err)
 		return err

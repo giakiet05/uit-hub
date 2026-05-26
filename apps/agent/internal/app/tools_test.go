@@ -50,6 +50,9 @@ func TestNewToolSetLoadsMockMCPToolCatalog(t *testing.T) {
 	if !slices.Contains(names, "load_mcp_tool") {
 		t.Fatalf("base tools missing load_mcp_tool: %v", names)
 	}
+	if !slices.Contains(names, "calculator") {
+		t.Fatalf("base tools missing calculator: %v", names)
+	}
 	if slices.Contains(names, "mock_uit__get_student_profile") {
 		t.Fatalf("MCP tool was eagerly registered in base tools: %v", names)
 	}
@@ -61,10 +64,18 @@ func TestNewToolSetLoadsMockMCPToolCatalog(t *testing.T) {
 	for _, want := range []string{
 		"mock_uit__get_student_profile",
 		"mock_uit__search_courses",
+		"mock_uit__get_student_schedule",
+		"mock_uit__get_course_detail",
+		"mock_uit__get_tuition_status",
 		"mock_uit__upsert_student_note",
 		"mock_uit__list_student_notes",
 		"mock_uit__delete_student_note",
 		"mock_uit__submit_leave_request",
+		"mock_uit__create_study_plan",
+		"mock_uit__patch_study_plan",
+		"mock_uit__create_advisor_ticket",
+		"mock_uit__patch_advisor_ticket",
+		"mock_uit__submit_support_request",
 	} {
 		if !slices.Contains(catalogNames, want) {
 			t.Fatalf("catalog missing %q: %v", want, catalogNames)

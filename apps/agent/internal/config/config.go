@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -44,8 +45,17 @@ type OpenAIConfig struct {
 	BaseURL string
 }
 
-// LoadEnv loads local environment variables from a .env file when present.
+// LoadEnv loads local environment variables from the nearest known agent .env file when present.
 func LoadEnv() error {
+	candidates := []string{
+		".env",
+		filepath.Join("apps", "agent", ".env"),
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return godotenv.Load(candidate)
+		}
+	}
 	return godotenv.Load()
 }
 

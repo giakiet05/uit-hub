@@ -31,9 +31,7 @@ func newToolSet(
 	mcpManager := mcpadapter.NewManager()
 
 	baseRegistry, err := tool.NewBaseRegistry(
-		localtool.NewEcho(),
 		localtool.NewCalculator(),
-		localtool.NewCurrentTime(),
 		localtool.NewReadFile("tmp/agent-files"),
 		localtool.NewWriteFile("tmp/agent-files"),
 		localtool.NewMemoryRead(memoryStore),

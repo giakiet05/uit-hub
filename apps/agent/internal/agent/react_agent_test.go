@@ -22,7 +22,7 @@ import (
 
 func TestReActAgentRunsProvider(t *testing.T) {
 	agent := NewReActAgent(
-		echoTestProvider{},
+		answerTestProvider{},
 		WithPromptBuilder(newTestPromptBuilder()),
 		WithLogger(logging.NewNopLogger()),
 	)
@@ -91,7 +91,7 @@ func TestReActAgentLogsRunStats(t *testing.T) {
 }
 
 func TestReActAgentLogsTimeline(t *testing.T) {
-	registry, err := tool.NewBaseRegistry(localtool.NewEcho())
+	registry, err := tool.NewBaseRegistry(localtool.NewCalculator())
 	if err != nil {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
@@ -115,11 +115,11 @@ func TestReActAgentLogsTimeline(t *testing.T) {
 		`msg="Round 1: Think"`,
 		`msg="Round 1: Act"`,
 		"decision_summary=",
-		"Need echo to mirror the requested text",
-		`msg="Round 1: Tool echo started"`,
+		"Need calculator to produce the requested value",
+		`msg="Round 1: Tool calculator started"`,
 		"arguments_preview=",
-		`msg="Round 1: Observe echo"`,
-		"result_preview=hello",
+		`msg="Round 1: Observe calculator"`,
+		"result_preview=42",
 		`msg="Round 2: Think"`,
 		`msg="Round 2: Answer"`,
 	}
@@ -185,13 +185,7 @@ func TestReActAgentTimesOutToolCalls(t *testing.T) {
 }
 
 func TestReActAgentExecutesToolCalls(t *testing.T) {
-	registry, err := tool.NewBaseRegistry(
-		localtool.NewEcho(),
-		localtool.NewCalculator(),
-		localtool.NewCurrentTimeWithClock(func() time.Time {
-			return time.Date(2026, 5, 14, 10, 30, 0, 0, time.UTC)
-		}),
-	)
+	registry, err := tool.NewBaseRegistry(localtool.NewCalculator())
 	if err != nil {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
@@ -216,10 +210,7 @@ func TestReActAgentExecutesToolCalls(t *testing.T) {
 }
 
 func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
-	registry, err := tool.NewBaseRegistry(
-		localtool.NewEcho(),
-		localtool.NewCalculator(),
-	)
+	registry, err := tool.NewBaseRegistry(localtool.NewCalculator())
 	if err != nil {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
@@ -247,7 +238,7 @@ func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
 }
 
 func TestReActAgentEmitsToolEvents(t *testing.T) {
-	registry, err := tool.NewBaseRegistry(localtool.NewEcho())
+	registry, err := tool.NewBaseRegistry(localtool.NewCalculator())
 	if err != nil {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
@@ -276,7 +267,7 @@ func TestReActAgentEmitsToolEvents(t *testing.T) {
 }
 
 func TestReActAgentEmitsMaxRounds(t *testing.T) {
-	registry, err := tool.NewBaseRegistry(localtool.NewEcho())
+	registry, err := tool.NewBaseRegistry(localtool.NewCalculator())
 	if err != nil {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
@@ -355,9 +346,9 @@ type scriptedToolProvider struct {
 
 type usageProvider struct{}
 
-type echoTestProvider struct{}
+type answerTestProvider struct{}
 
-func (p echoTestProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
+func (p answerTestProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
 	for i := len(request.Messages) - 1; i >= 0; i-- {
 		if _, ok := request.Messages[i].(conversation.UserMessage); ok {
 			return llm.GenerateResponse{
@@ -399,12 +390,14 @@ func (p *timelineProvider) Generate(ctx context.Context, request llm.GenerateReq
 	p.calls++
 	if p.calls == 1 {
 		return llm.GenerateResponse{
-			Message: conversation.NewAssistantMessage("Need echo to mirror the requested text.", []conversation.ToolCall{
+			Message: conversation.NewAssistantMessage("Need calculator to produce the requested value.", []conversation.ToolCall{
 				{
-					ID:   "call-echo",
-					Name: "echo",
+					ID:   "call-calc",
+					Name: "calculator",
 					Arguments: map[string]any{
-						"text": "hello",
+						"operation": "multiply",
+						"a":         6,
+						"b":         7,
 					},
 				},
 			}),
@@ -427,17 +420,19 @@ func (p *multiRoundToolProvider) Generate(ctx context.Context, request llm.Gener
 		return llm.GenerateResponse{
 			Message: conversation.NewAssistantMessage("", []conversation.ToolCall{
 				{
-					ID:   "call-echo",
-					Name: "echo",
+					ID:   "call-first",
+					Name: "calculator",
 					Arguments: map[string]any{
-						"text": "first observation",
+						"operation": "add",
+						"a":         1,
+						"b":         1,
 					},
 				},
 			}),
 		}, nil
 	case 2:
 		transcript := toolTranscript(request.Messages)
-		if !strings.Contains(transcript, "call-echo=first observation") {
+		if !strings.Contains(transcript, "call-first=2") {
 			return llm.GenerateResponse{}, fmt.Errorf("missing first observation in %q", transcript)
 		}
 		return llm.GenerateResponse{
@@ -469,18 +464,11 @@ func (p *multiRoundToolProvider) Generate(ctx context.Context, request llm.Gener
 func (p *scriptedToolProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
 	p.calls++
 	if p.calls == 1 {
-		if got, want := len(request.Tools), 3; got != want {
+		if got, want := len(request.Tools), 1; got != want {
 			return llm.GenerateResponse{}, fmt.Errorf("tool count = %d, want %d", got, want)
 		}
 		return llm.GenerateResponse{
 			Message: conversation.NewAssistantMessage("", []conversation.ToolCall{
-				{
-					ID:   "call-echo",
-					Name: "echo",
-					Arguments: map[string]any{
-						"text": "hello tool",
-					},
-				},
 				{
 					ID:   "call-calc",
 					Name: "calculator",
@@ -491,10 +479,12 @@ func (p *scriptedToolProvider) Generate(ctx context.Context, request llm.Generat
 					},
 				},
 				{
-					ID:   "call-time",
-					Name: "current_time",
+					ID:   "call-add",
+					Name: "calculator",
 					Arguments: map[string]any{
-						"timezone": "Asia/Ho_Chi_Minh",
+						"operation": "add",
+						"a":         20,
+						"b":         22,
 					},
 				},
 			}),
@@ -502,14 +492,11 @@ func (p *scriptedToolProvider) Generate(ctx context.Context, request llm.Generat
 	}
 
 	transcript := toolTranscript(request.Messages)
-	if !strings.Contains(transcript, "call-echo=hello tool") {
-		return llm.GenerateResponse{}, fmt.Errorf("missing echo result in %q", transcript)
-	}
 	if !strings.Contains(transcript, "call-calc=42") {
 		return llm.GenerateResponse{}, fmt.Errorf("missing calculator result in %q", transcript)
 	}
-	if !strings.Contains(transcript, "call-time=2026-05-14T17:30:00+07:00") {
-		return llm.GenerateResponse{}, fmt.Errorf("missing current_time result in %q", transcript)
+	if !strings.Contains(transcript, "call-add=42") {
+		return llm.GenerateResponse{}, fmt.Errorf("missing second calculator result in %q", transcript)
 	}
 
 	return llm.GenerateResponse{
