@@ -10,6 +10,9 @@ import (
 func newSessionPrompt(memoryContext memory.Context, mcpCatalog []mcpadapter.ToolMetadata) prompt.SessionPrompt {
 	return prompt.SessionPrompt{
 		StaticParts: []prompt.StaticPart{
+			prompt.IdentityStaticPrompt(),
+			prompt.BehaviorStaticPrompt(),
+			prompt.ToolUsageStaticPrompt(),
 			prompt.ReActStaticPrompt(),
 		},
 		DynamicParts: []prompt.DynamicPart{

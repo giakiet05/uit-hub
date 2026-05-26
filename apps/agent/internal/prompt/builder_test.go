@@ -88,6 +88,24 @@ func TestReActStaticPrompt(t *testing.T) {
 	}
 }
 
+func TestStaticPromptBlocks(t *testing.T) {
+	blocks := []struct {
+		name string
+		part prompt.StaticPart
+		want string
+	}{
+		{name: "identity", part: prompt.IdentityStaticPrompt(), want: "You are Tiêu"},
+		{name: "behavior", part: prompt.BehaviorStaticPrompt(), want: "Do not invent student records"},
+		{name: "tool usage", part: prompt.ToolUsageStaticPrompt(), want: "Tool arguments must match"},
+	}
+
+	for _, block := range blocks {
+		if !strings.Contains(string(block.part), block.want) {
+			t.Fatalf("%s prompt missing %q in %q", block.name, block.want, block.part)
+		}
+	}
+}
+
 func TestMemoryDynamicPromptIncludesIndexAndPolicy(t *testing.T) {
 	dynamicPrompt := prompt.MemoryDynamicPrompt(memory.Context{
 		IndexText: "- [Response Style](feedback_response_style) [feedback] -- User prefers concise answers.",
