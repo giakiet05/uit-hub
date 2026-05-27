@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/joho/godotenv"
 )
@@ -24,6 +25,7 @@ type Config struct {
 
 // AgentConfig contains agent loop limits.
 type AgentConfig struct {
+	Type        agent.Type
 	MaxRounds   int
 	ToolTimeout time.Duration
 }
@@ -69,6 +71,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		Provider: envProviderOrDefault("LLM_PROVIDER", llm.ProviderTypeOpenAI),
 		Agent: AgentConfig{
+			Type:        agent.Type(envOrDefault("AGENT_TYPE", agent.TypeReAct.String())),
 			MaxRounds:   envIntOrDefault("AGENT_MAX_ROUNDS", 0),
 			ToolTimeout: envDurationOrDefault("AGENT_TOOL_TIMEOUT", 15*time.Second),
 		},

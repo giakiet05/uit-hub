@@ -67,6 +67,8 @@ const (
 	activityKindObserve  activityKind = "observe"
 	activityKindError    activityKind = "error"
 	activityKindDone     activityKind = "done"
+	activityKindPlan     activityKind = "plan"
+	activityKindStep     activityKind = "step"
 )
 
 // agentEventMsg carries one streamed agent event back into the TUI update loop.
@@ -265,6 +267,29 @@ func (m model) handleAgentEvent(event agent.Event) model {
 	case agent.ModelTextDeltaEvent:
 		m.status = "streaming"
 		m.appendAssistantDelta(typed.Delta)
+	case agent.PlanCreatedEvent:
+		m.status = "plan"
+		m.streamingIndex = -1
+		m.appendActivity(activityKindPlan, fmt.Sprintf("plan: %s", typed.Summary))
+	case agent.StepStartedEvent:
+		m.status = "step " + typed.StepID
+		m.streamingIndex = -1
+		m.appendActivity(activityKindStep, fmt.Sprintf("%s: %s", typed.StepID, typed.Description))
+	case agent.StepCompletedEvent:
+		m.status = "step completed " + typed.StepID
+		m.appendActivity(activityKindObserve, fmt.Sprintf("%s completed: %s", typed.StepID, typed.Summary))
+	case agent.StepFailedEvent:
+		m.status = "step failed " + typed.StepID
+		m.appendActivity(activityKindError, fmt.Sprintf("%s failed: %v", typed.StepID, typed.Err))
+	case agent.ReplanStartedEvent:
+		m.status = "replanning"
+		m.appendActivity(activityKindPlan, "replanning after "+typed.StepID)
+	case agent.PlanUpdatedEvent:
+		m.status = "plan updated"
+		m.appendActivity(activityKindPlan, "plan updated: "+typed.Summary)
+	case agent.FinalizingEvent:
+		m.status = "finalizing"
+		m.appendActivity(activityKindThinking, "finalizing")
 	case agent.ToolCallStartedEvent:
 		m.status = "tool " + typed.Call.Name
 		m.streamingIndex = -1
@@ -680,6 +705,10 @@ func activityMessageStyle(kind activityKind) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	case activityKindDone:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("120"))
+	case activityKindPlan:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
+	case activityKindStep:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 	default:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
 	}

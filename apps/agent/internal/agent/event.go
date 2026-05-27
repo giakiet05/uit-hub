@@ -64,6 +64,54 @@ type ModelTextDeltaEvent struct {
 	Delta     string
 }
 
+// PlanCreatedEvent is emitted when a plan-and-execute run creates its initial
+// structured plan.
+type PlanCreatedEvent struct {
+	SessionID string
+	StepCount int
+	Summary   string
+}
+
+// StepStartedEvent is emitted before executing one planned step.
+type StepStartedEvent struct {
+	SessionID   string
+	StepID      string
+	Description string
+}
+
+// StepCompletedEvent is emitted after one planned step finishes successfully.
+type StepCompletedEvent struct {
+	SessionID string
+	StepID    string
+	Summary   string
+}
+
+// StepFailedEvent is emitted when one planned step fails before replanning.
+type StepFailedEvent struct {
+	SessionID string
+	StepID    string
+	Err       error
+}
+
+// ReplanStartedEvent is emitted before asking the model to repair a failed
+// plan or step.
+type ReplanStartedEvent struct {
+	SessionID string
+	StepID    string
+}
+
+// PlanUpdatedEvent is emitted after replanning changes the remaining work.
+type PlanUpdatedEvent struct {
+	SessionID string
+	Summary   string
+}
+
+// FinalizingEvent is emitted before synthesizing the final answer from step
+// results.
+type FinalizingEvent struct {
+	SessionID string
+}
+
 // ToolCallStartedEvent is emitted before executing one tool call.
 type ToolCallStartedEvent struct {
 	SessionID string
@@ -117,6 +165,13 @@ func (RoundStartedEvent) isAgentEvent()       {}
 func (ModelCallStartedEvent) isAgentEvent()   {}
 func (ModelCallCompletedEvent) isAgentEvent() {}
 func (ModelTextDeltaEvent) isAgentEvent()     {}
+func (PlanCreatedEvent) isAgentEvent()        {}
+func (StepStartedEvent) isAgentEvent()        {}
+func (StepCompletedEvent) isAgentEvent()      {}
+func (StepFailedEvent) isAgentEvent()         {}
+func (ReplanStartedEvent) isAgentEvent()      {}
+func (PlanUpdatedEvent) isAgentEvent()        {}
+func (FinalizingEvent) isAgentEvent()         {}
 func (ToolCallStartedEvent) isAgentEvent()    {}
 func (ToolCallCompletedEvent) isAgentEvent()  {}
 func (ToolCallFailedEvent) isAgentEvent()     {}

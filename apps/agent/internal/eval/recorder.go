@@ -68,6 +68,20 @@ func (r *Recorder) Record(event agent.Event) {
 			return
 		}
 		r.addTrace("round %d: model requested tools: %s", typed.Round, strings.Join(typed.ToolCallNames, ", "))
+	case agent.PlanCreatedEvent:
+		r.addTrace("plan created: steps=%d summary=%s", typed.StepCount, typed.Summary)
+	case agent.StepStartedEvent:
+		r.addTrace("step started: %s -> %s", typed.StepID, typed.Description)
+	case agent.StepCompletedEvent:
+		r.addTrace("step completed: %s -> %s", typed.StepID, preview(typed.Summary))
+	case agent.StepFailedEvent:
+		r.addTrace("step failed: %s -> %v", typed.StepID, typed.Err)
+	case agent.ReplanStartedEvent:
+		r.addTrace("replan started after step: %s", typed.StepID)
+	case agent.PlanUpdatedEvent:
+		r.addTrace("plan updated: %s", typed.Summary)
+	case agent.FinalizingEvent:
+		r.addTrace("finalizing")
 	case agent.ToolCallStartedEvent:
 		r.result.ToolCalls++
 		r.result.ToolCallNames = append(r.result.ToolCallNames, typed.Call.Name)

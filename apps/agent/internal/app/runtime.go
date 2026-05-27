@@ -43,14 +43,10 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger) (*R
 	logger.DebugContext(ctx, "Tool registry initialized", "tool_count", len(tools.Definitions()))
 
 	promptBuilder := prompt.NewBuilder(newSessionPrompt(memoryContext, mcpManager.Catalog()))
-	runtimeAgent := agent.NewReActAgent(
-		provider,
-		agent.WithPromptBuilder(promptBuilder),
-		agent.WithTools(tools),
-		agent.WithLogger(logger),
-		agent.WithMaxRounds(cfg.Agent.MaxRounds),
-		agent.WithToolTimeout(cfg.Agent.ToolTimeout),
-	)
+	runtimeAgent, err := newAgent(cfg, provider, promptBuilder, tools, logger)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Runtime{
 		Agent:   runtimeAgent,

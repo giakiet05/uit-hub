@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path/filepath"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/app"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 )
@@ -27,6 +28,9 @@ func NewRunner(cfg config.Config, logger *slog.Logger) *Runner {
 func (r *Runner) RunCase(ctx context.Context, testCase Case, outputRoot string) (Result, string, error) {
 	cfg := r.cfg
 	cfg.Memory.Path = filepath.Join(r.cfg.Memory.Path, safePathPart(testCase.ID))
+	if testCase.AgentType != "" {
+		cfg.Agent.Type = agent.Type(testCase.AgentType)
+	}
 
 	runtime, err := app.NewRuntime(ctx, cfg, r.logger)
 	if err != nil {

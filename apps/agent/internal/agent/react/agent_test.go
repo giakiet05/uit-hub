@@ -1,4 +1,4 @@
-package agent
+package react
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/localtool"
@@ -243,7 +244,7 @@ func TestReActAgentEmitsToolEvents(t *testing.T) {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
 
-	agent := NewReActAgent(
+	runtimeAgent := NewReActAgent(
 		&timelineProvider{},
 		WithPromptBuilder(newTestPromptBuilder()),
 		WithTools(newTestToolSet(registry)),
@@ -251,18 +252,18 @@ func TestReActAgentEmitsToolEvents(t *testing.T) {
 	)
 	session := runtime.NewSession()
 
-	events := collectAgentEvents(t, agent.Run(context.Background(), session, "track events"))
-	assertEventType(t, events, RunStartedEvent{})
-	assertEventType(t, events, RoundStartedEvent{})
-	assertEventType(t, events, ModelCallStartedEvent{})
-	assertEventType(t, events, ModelCallCompletedEvent{})
-	assertEventType(t, events, ToolCallStartedEvent{})
-	assertEventType(t, events, ToolCallCompletedEvent{})
-	assertEventType(t, events, FinalAnswerEvent{})
+	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, "track events"))
+	assertEventType(t, events, agent.RunStartedEvent{})
+	assertEventType(t, events, agent.RoundStartedEvent{})
+	assertEventType(t, events, agent.ModelCallStartedEvent{})
+	assertEventType(t, events, agent.ModelCallCompletedEvent{})
+	assertEventType(t, events, agent.ToolCallStartedEvent{})
+	assertEventType(t, events, agent.ToolCallCompletedEvent{})
+	assertEventType(t, events, agent.FinalAnswerEvent{})
 
 	completed := lastCompletedEvent(t, events)
-	if completed.Reason != TerminalCompleted {
-		t.Fatalf("terminal reason = %q, want %q", completed.Reason, TerminalCompleted)
+	if completed.Reason != agent.TerminalCompleted {
+		t.Fatalf("terminal reason = %q, want %q", completed.Reason, agent.TerminalCompleted)
 	}
 }
 
@@ -272,7 +273,7 @@ func TestReActAgentEmitsMaxRounds(t *testing.T) {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
 
-	agent := NewReActAgent(
+	runtimeAgent := NewReActAgent(
 		&timelineProvider{},
 		WithPromptBuilder(newTestPromptBuilder()),
 		WithTools(newTestToolSet(registry)),
@@ -281,10 +282,10 @@ func TestReActAgentEmitsMaxRounds(t *testing.T) {
 	)
 	session := runtime.NewSession()
 
-	events := collectAgentEvents(t, agent.Run(context.Background(), session, "hit max rounds"))
+	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, "hit max rounds"))
 	completed := lastCompletedEvent(t, events)
-	if completed.Reason != TerminalMaxRounds {
-		t.Fatalf("terminal reason = %q, want %q", completed.Reason, TerminalMaxRounds)
+	if completed.Reason != agent.TerminalMaxRounds {
+		t.Fatalf("terminal reason = %q, want %q", completed.Reason, agent.TerminalMaxRounds)
 	}
 }
 
@@ -293,12 +294,12 @@ func runAgentForAnswer(t *testing.T, runtimeAgent *ReActAgent, session *runtime.
 
 	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, input))
 	for _, event := range events {
-		if failed, ok := event.(RunFailedEvent); ok {
+		if failed, ok := event.(agent.RunFailedEvent); ok {
 			t.Fatalf("Run() failed: %v", failed.Err)
 		}
 	}
 	for i := len(events) - 1; i >= 0; i-- {
-		if answer, ok := events[i].(FinalAnswerEvent); ok {
+		if answer, ok := events[i].(agent.FinalAnswerEvent); ok {
 			return answer.Message
 		}
 	}
@@ -306,17 +307,17 @@ func runAgentForAnswer(t *testing.T, runtimeAgent *ReActAgent, session *runtime.
 	return nil
 }
 
-func collectAgentEvents(t *testing.T, stream <-chan Event) []Event {
+func collectAgentEvents(t *testing.T, stream <-chan agent.Event) []agent.Event {
 	t.Helper()
 
-	events := []Event{}
+	events := []agent.Event{}
 	for event := range stream {
 		events = append(events, event)
 	}
 	return events
 }
 
-func assertEventType(t *testing.T, events []Event, target Event) {
+func assertEventType(t *testing.T, events []agent.Event, target agent.Event) {
 	t.Helper()
 
 	targetType := reflect.TypeOf(target)
@@ -328,16 +329,16 @@ func assertEventType(t *testing.T, events []Event, target Event) {
 	t.Fatalf("missing event type %T in %#v", target, events)
 }
 
-func lastCompletedEvent(t *testing.T, events []Event) RunCompletedEvent {
+func lastCompletedEvent(t *testing.T, events []agent.Event) agent.RunCompletedEvent {
 	t.Helper()
 
 	for i := len(events) - 1; i >= 0; i-- {
-		if completed, ok := events[i].(RunCompletedEvent); ok {
+		if completed, ok := events[i].(agent.RunCompletedEvent); ok {
 			return completed
 		}
 	}
-	t.Fatalf("missing RunCompletedEvent in %#v", events)
-	return RunCompletedEvent{}
+	t.Fatalf("missing agent.RunCompletedEvent in %#v", events)
+	return agent.RunCompletedEvent{}
 }
 
 type scriptedToolProvider struct {

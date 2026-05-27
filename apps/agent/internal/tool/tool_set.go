@@ -34,6 +34,17 @@ func (s *ToolSet) Definitions() []Definition {
 	return definitions
 }
 
+// Definition returns one visible tool definition by name.
+func (s *ToolSet) Definition(name string) (Definition, bool) {
+	if s == nil {
+		return Definition{}, false
+	}
+	if definition, exists := s.base.Definition(name); exists {
+		return definition, true
+	}
+	return s.runtime.Definition(name)
+}
+
 // Execute runs a tool from the base registry first, then the runtime registry.
 func (s *ToolSet) Execute(ctx context.Context, call Call) (Result, error) {
 	if s == nil {

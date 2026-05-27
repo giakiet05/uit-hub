@@ -32,6 +32,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	logger.DebugContext(
 		ctx,
 		"Agent config loaded",
+		"agent_type", cfg.Agent.Type,
 		"llm_provider", cfg.Provider,
 		"openai_model", cfg.OpenAI.Model,
 		"openai_base_url", cfg.OpenAI.BaseURL,

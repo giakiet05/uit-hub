@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant TUI
+    participant Runtime
+    participant Planner
+    participant Executor
+    participant Tools
+    participant Replanner
+    participant Finalizer
+
+    User->>TUI: Tra hồ sơ SV 22520001 và lịch học hôm nay
+    TUI->>Runtime: Submit message
+    Runtime->>Planner: Build plan from task and tool catalog
+    Planner-->>Runtime: Plan with two independent steps
+
+    par Step A: student profile
+        Runtime->>Executor: Execute step A
+        Executor->>Tools: load_mcp_tool(get_student_profile)
+        Tools-->>Executor: Tool loaded
+        Executor->>Tools: get_student_profile(student_id)
+        Tools-->>Executor: Profile observation
+        Executor-->>Runtime: Step A result
+    and Step B: today's schedule
+        Runtime->>Executor: Execute step B
+        Executor->>Tools: load_mcp_tool(get_today_schedule)
+        Tools-->>Executor: Tool loaded
+        Executor->>Tools: get_today_schedule(student_id)
+        Tools-->>Executor: Schedule observation
+        Executor-->>Runtime: Step B result
+    end
+
+    Runtime->>Replanner: Check plan progress and missing data
+    Replanner-->>Runtime: Plan complete
+    Runtime->>Finalizer: Synthesize answer from step results
+    Finalizer-->>Runtime: Final answer
+    Runtime-->>TUI: Stream plan, step results, answer, stats
+    TUI-->>User: Show final answer
