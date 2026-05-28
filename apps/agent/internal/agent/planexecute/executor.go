@@ -7,26 +7,26 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 func (a *PlanAndExecuteAgent) executeStep(
 	ctx context.Context,
 	events chan<- agent.Event,
-	session *runtime.Session,
+	session *session.State,
 	userPrompt string,
 	step planStep,
 	state executionState,
 	stats *agent.RunStats,
 ) (stepResult, error) {
-	stepMessages := a.promptBuilder.BuildAgentMessages(nil, []conversation.Message{
+	stepMessages := session.BuildMessages(nil, []conversation.Message{
 		conversation.NewUserMessage(executorPrompt(userPrompt, step, state)),
 	})
 	toolCalls := []string{}
 	observations := []string{}
 
 	for round := 1; round <= a.maxStepRounds; round++ {
-		response, err := a.callModel(ctx, events, session.ID, stats.Rounds, stepMessages, a.stepToolDefinitions(step), stats)
+		response, err := a.callModel(ctx, events, session.ID, stats.Rounds, stepMessages, a.stepToolDefinitions(session, step), stats)
 		if err != nil {
 			return stepResult{}, err
 		}
@@ -42,7 +42,7 @@ func (a *PlanAndExecuteAgent) executeStep(
 		}
 
 		for _, call := range calls {
-			result, err := a.executeToolCall(ctx, events, session.ID, stats.Rounds, call, stats)
+			result, err := a.executeToolCall(ctx, events, session, stats.Rounds, call, stats)
 			if err != nil {
 				observations = append(observations, loop.ToolErrorObservation(err))
 				stepMessages = append(stepMessages, conversation.NewToolResultMessage(call.ID, loop.ToolErrorObservation(err)))

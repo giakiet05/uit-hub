@@ -34,8 +34,7 @@ func (a *PlanAndExecuteAgent) callModel(
 	if err != nil {
 		return llm.GenerateResponse{}, err
 	}
-	stats.InputTokens += response.Usage.InputTokens
-	stats.OutputTokens += response.Usage.OutputTokens
+	stats.TokenUsage.Add(response.Usage)
 
 	toolCalls := loop.AssistantToolCalls(response.Message)
 	if !loop.Emit(ctx, events, agent.ModelCallCompletedEvent{

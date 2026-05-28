@@ -7,7 +7,7 @@ import (
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 func TestModelRendersConversationAndLogs(t *testing.T) {
@@ -17,7 +17,7 @@ func TestModelRendersConversationAndLogs(t *testing.T) {
 		t.Fatalf("Write() error = %v", err)
 	}
 
-	m := newModel(context.Background(), runtime.NewSession(), fakeAgent{}, logs, "")
+	m := newModel(context.Background(), session.NewState(), fakeAgent{}, logs, "")
 	m.width = 80
 	m.height = 24
 	m.resizeViewports()
@@ -49,7 +49,7 @@ func TestModelRendersConversationAndLogs(t *testing.T) {
 }
 
 func TestModelRendersAgentActivityEvents(t *testing.T) {
-	m := newModel(context.Background(), runtime.NewSession(), fakeAgent{}, nil, "")
+	m := newModel(context.Background(), session.NewState(), fakeAgent{}, nil, "")
 	m.width = 80
 	m.height = 24
 	m.resizeViewports()
@@ -98,7 +98,7 @@ func TestModelRendersAgentActivityEvents(t *testing.T) {
 
 type fakeAgent struct{}
 
-func (fakeAgent) Run(ctx context.Context, session *runtime.Session, input string) <-chan agent.Event {
+func (fakeAgent) Run(ctx context.Context, session *session.State, input string) <-chan agent.Event {
 	events := make(chan agent.Event, 2)
 	go func() {
 		defer close(events)

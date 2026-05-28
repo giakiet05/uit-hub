@@ -7,12 +7,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 // Runner owns the Bubble Tea program setup for the agent TUI.
 type Runner struct {
-	session       *runtime.Session
+	session       *session.State
 	agent         agent.Agent
 	stdin         io.Reader
 	stdout        io.Writer
@@ -21,7 +21,7 @@ type Runner struct {
 }
 
 // NewRunner creates a TUI runner for one session.
-func NewRunner(session *runtime.Session, runtimeAgent agent.Agent, stdin io.Reader, stdout io.Writer, logs *LogBuffer, initialPrompt string) *Runner {
+func NewRunner(session *session.State, runtimeAgent agent.Agent, stdin io.Reader, stdout io.Writer, logs *LogBuffer, initialPrompt string) *Runner {
 	return &Runner{
 		session:       session,
 		agent:         runtimeAgent,

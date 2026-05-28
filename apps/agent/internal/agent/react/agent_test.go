@@ -17,17 +17,17 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/localtool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
 
 func TestReActAgentRunsProvider(t *testing.T) {
 	agent := NewReActAgent(
 		answerTestProvider{},
-		WithPromptBuilder(newTestPromptBuilder()),
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(nil)
 
 	message := runAgentForAnswer(t, agent, session, "xin chao")
 
@@ -40,10 +40,9 @@ func TestReActAgentSendsSystemPromptWithoutStoringItInConversation(t *testing.T)
 	provider := &captureMessagesProvider{}
 	agent := NewReActAgent(
 		provider,
-		WithPromptBuilder(newTestPromptBuilder()),
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(nil)
 
 	_ = runAgentForAnswer(t, agent, session, "xin chao")
 
@@ -67,10 +66,9 @@ func TestReActAgentLogsRunStats(t *testing.T) {
 	}))
 	agent := NewReActAgent(
 		usageProvider{},
-		WithPromptBuilder(newTestPromptBuilder()),
 		WithLogger(logger),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(nil)
 
 	_ = runAgentForAnswer(t, agent, session, "track stats")
 
@@ -103,11 +101,9 @@ func TestReActAgentLogsTimeline(t *testing.T) {
 	}))
 	agent := NewReActAgent(
 		&timelineProvider{},
-		WithPromptBuilder(newTestPromptBuilder()),
-		WithTools(newTestToolSet(registry)),
 		WithLogger(logger),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(newTestToolSet(registry))
 
 	_ = runAgentForAnswer(t, agent, session, "track timeline")
 
@@ -140,11 +136,9 @@ func TestReActAgentHidesRawToolErrorsFromObservation(t *testing.T) {
 	provider := &toolErrorProvider{}
 	agent := NewReActAgent(
 		provider,
-		WithPromptBuilder(newTestPromptBuilder()),
-		WithTools(newTestToolSet(registry)),
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(newTestToolSet(registry))
 
 	message := runAgentForAnswer(t, agent, session, "test failing tool")
 
@@ -168,12 +162,10 @@ func TestReActAgentTimesOutToolCalls(t *testing.T) {
 	provider := &toolTimeoutProvider{}
 	agent := NewReActAgent(
 		provider,
-		WithPromptBuilder(newTestPromptBuilder()),
-		WithTools(newTestToolSet(registry)),
 		WithLogger(logging.NewNopLogger()),
 		WithToolTimeout(time.Millisecond),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(newTestToolSet(registry))
 
 	message := runAgentForAnswer(t, agent, session, "test slow tool")
 
@@ -194,11 +186,9 @@ func TestReActAgentExecutesToolCalls(t *testing.T) {
 	provider := &scriptedToolProvider{}
 	agent := NewReActAgent(
 		provider,
-		WithPromptBuilder(newTestPromptBuilder()),
-		WithTools(newTestToolSet(registry)),
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(newTestToolSet(registry))
 
 	message := runAgentForAnswer(t, agent, session, "test tools")
 
@@ -219,11 +209,9 @@ func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
 	provider := &multiRoundToolProvider{}
 	agent := NewReActAgent(
 		provider,
-		WithPromptBuilder(newTestPromptBuilder()),
-		WithTools(newTestToolSet(registry)),
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(newTestToolSet(registry))
 
 	message := runAgentForAnswer(t, agent, session, "multi round")
 
@@ -246,11 +234,9 @@ func TestReActAgentEmitsToolEvents(t *testing.T) {
 
 	runtimeAgent := NewReActAgent(
 		&timelineProvider{},
-		WithPromptBuilder(newTestPromptBuilder()),
-		WithTools(newTestToolSet(registry)),
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(newTestToolSet(registry))
 
 	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, "track events"))
 	assertEventType(t, events, agent.RunStartedEvent{})
@@ -275,12 +261,10 @@ func TestReActAgentEmitsMaxRounds(t *testing.T) {
 
 	runtimeAgent := NewReActAgent(
 		&timelineProvider{},
-		WithPromptBuilder(newTestPromptBuilder()),
-		WithTools(newTestToolSet(registry)),
 		WithLogger(logging.NewNopLogger()),
 		WithMaxRounds(1),
 	)
-	session := runtime.NewSession()
+	session := newTestSession(newTestToolSet(registry))
 
 	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, "hit max rounds"))
 	completed := lastCompletedEvent(t, events)
@@ -289,7 +273,7 @@ func TestReActAgentEmitsMaxRounds(t *testing.T) {
 	}
 }
 
-func runAgentForAnswer(t *testing.T, runtimeAgent *ReActAgent, session *runtime.Session, input string) conversation.Message {
+func runAgentForAnswer(t *testing.T, runtimeAgent *ReActAgent, session *session.State, input string) conversation.Message {
 	t.Helper()
 
 	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, input))
@@ -376,7 +360,7 @@ func (p *captureMessagesProvider) Generate(ctx context.Context, request llm.Gene
 func (p usageProvider) Generate(ctx context.Context, request llm.GenerateRequest) (llm.GenerateResponse, error) {
 	return llm.GenerateResponse{
 		Message: conversation.NewAssistantMessage("done", nil),
-		Usage: llm.Usage{
+		Usage: usage.TokenUsage{
 			InputTokens:  12,
 			OutputTokens: 7,
 		},
@@ -607,12 +591,15 @@ func countToolResults(messages []conversation.Message) int {
 	return count
 }
 
-func newTestPromptBuilder() *prompt.Builder {
-	return prompt.NewBuilder(prompt.SessionPrompt{
-		DynamicParts: []prompt.DynamicPart{"system"},
-	})
-}
-
 func newTestToolSet(registry *tool.BaseRegistry) *tool.ToolSet {
 	return tool.NewToolSet(registry, tool.NewRuntimeRegistry(20))
+}
+
+func newTestSession(tools *tool.ToolSet) *session.State {
+	return session.NewState(
+		session.WithPromptSnapshot(prompt.SessionPrompt{
+			DynamicParts: []prompt.DynamicPart{"system"},
+		}),
+		session.WithTools(tools),
+	)
 }

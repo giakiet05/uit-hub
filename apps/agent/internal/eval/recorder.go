@@ -59,10 +59,7 @@ func (r *Recorder) Record(event agent.Event) {
 		r.result.LLMCalls++
 		r.addTrace("round %d: model call started", typed.Round)
 	case agent.ModelCallCompletedEvent:
-		r.result.InputTokens += typed.Usage.InputTokens
-		r.result.OutputTokens += typed.Usage.OutputTokens
-		r.result.Usage.InputTokens += typed.Usage.InputTokens
-		r.result.Usage.OutputTokens += typed.Usage.OutputTokens
+		r.result.TokenUsage.Add(typed.Usage)
 		if len(typed.ToolCallNames) == 0 {
 			r.addTrace("round %d: model completed without tool calls", typed.Round)
 			return
@@ -100,8 +97,7 @@ func (r *Recorder) Record(event agent.Event) {
 		r.result.LLMCalls = typed.Stats.LLMCalls
 		r.result.ToolCalls = typed.Stats.ToolCalls
 		r.result.ToolFailures = typed.Stats.ToolFailures
-		r.result.InputTokens = typed.Stats.InputTokens
-		r.result.OutputTokens = typed.Stats.OutputTokens
+		r.result.TokenUsage = typed.Stats.TokenUsage
 		r.addTrace("run completed: %s", typed.Reason)
 	case agent.RunFailedEvent:
 		r.result.Error = typed.Err.Error()
@@ -109,8 +105,7 @@ func (r *Recorder) Record(event agent.Event) {
 		r.result.LLMCalls = typed.Stats.LLMCalls
 		r.result.ToolCalls = typed.Stats.ToolCalls
 		r.result.ToolFailures = typed.Stats.ToolFailures
-		r.result.InputTokens = typed.Stats.InputTokens
-		r.result.OutputTokens = typed.Stats.OutputTokens
+		r.result.TokenUsage = typed.Stats.TokenUsage
 		r.addTrace("run failed: %s", typed.Err.Error())
 	}
 }

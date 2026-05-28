@@ -11,16 +11,18 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
-func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, session *runtime.Session, userPrompt string) {
+func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, session *session.State, userPrompt string) {
 	defer close(events)
 
-	stats := agent.NewRunStats()
+	runState := agent.NewRunState(session.ID, a.maxRounds)
+	stats := runState.Stats
 	fail := func(err error) {
-		stats.Finish()
+		runState.Finish()
 		a.logRunStats(ctx, session.ID, stats)
+		session.AddUsage(agent.UsageDeltaFromRunStats(stats))
 		loop.Emit(ctx, events, agent.RunFailedEvent{
 			SessionID: session.ID,
 			Err:       err,
@@ -28,8 +30,9 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, session
 		})
 	}
 	complete := func(reason agent.TerminalReason) {
-		stats.Finish()
+		runState.Finish()
 		a.logRunStats(ctx, session.ID, stats)
+		session.AddUsage(agent.UsageDeltaFromRunStats(stats))
 		loop.Emit(ctx, events, agent.RunCompletedEvent{
 			SessionID: session.ID,
 			Reason:    reason,
@@ -37,18 +40,19 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, session
 		})
 	}
 
-	if !loop.Emit(ctx, events, agent.RunStartedEvent{SessionID: session.ID, MaxRounds: a.maxRounds}) {
+	if !loop.Emit(ctx, events, agent.RunStartedEvent{SessionID: session.ID, MaxRounds: runState.MaxRounds}) {
 		return
 	}
 
 	session.Conversation.Append(conversation.NewUserMessage(userPrompt))
 	a.trace(ctx, "react.run.started", "Agent started", "session_id", session.ID, "max_rounds", a.maxRounds)
 
-	for round := 1; round <= a.maxRounds; round++ {
+	for round := 1; round <= runState.MaxRounds; round++ {
+		runState.Round = round
 		stats.Rounds = round
-		messages := a.promptBuilder.BuildAgentMessages(nil, session.Conversation.Messages())
+		messages := session.BuildAgentMessages(nil)
 		a.writePromptDebugFile(ctx, messages)
-		tools := a.getToolDefinitions()
+		tools := session.ToolDefinitions()
 		if !loop.Emit(ctx, events, agent.RoundStartedEvent{
 			SessionID:    session.ID,
 			Round:        round,
@@ -91,8 +95,7 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, session
 			fail(err)
 			return
 		}
-		stats.InputTokens += response.Usage.InputTokens
-		stats.OutputTokens += response.Usage.OutputTokens
+		stats.TokenUsage.Add(response.Usage)
 
 		session.Conversation.Append(response.Message)
 		toolCalls := loop.AssistantToolCalls(response.Message)

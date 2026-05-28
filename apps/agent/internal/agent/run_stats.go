@@ -1,17 +1,21 @@
 package agent
 
-import "time"
+import (
+	"time"
+
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
+)
 
 // RunStats records the high-level counters for a single agent run.
 type RunStats struct {
+	usage.TokenUsage
 	StartedAt    time.Time
 	FinishedAt   time.Time
 	Rounds       int
 	LLMCalls     int
 	ToolCalls    int
 	ToolFailures int
-	InputTokens  int
-	OutputTokens int
 }
 
 // NewRunStats starts a stats record with the current time.
@@ -33,4 +37,17 @@ func (s RunStats) Duration() time.Duration {
 		return time.Since(s.StartedAt)
 	}
 	return s.FinishedAt.Sub(s.StartedAt)
+}
+
+// UsageDeltaFromRunStats converts one run's stats into a session usage delta.
+func UsageDeltaFromRunStats(stats *RunStats) session.UsageDelta {
+	if stats == nil {
+		return session.UsageDelta{}
+	}
+	return session.UsageDelta{
+		TokenUsage:   stats.TokenUsage,
+		LLMCalls:     stats.LLMCalls,
+		ToolCalls:    stats.ToolCalls,
+		ToolFailures: stats.ToolFailures,
+	}
 }

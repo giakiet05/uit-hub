@@ -9,24 +9,18 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/react"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
 // newAgent creates the configured agent loop implementation.
 func newAgent(
 	cfg config.Config,
 	provider llm.Provider,
-	promptBuilder *prompt.Builder,
-	tools *tool.ToolSet,
 	logger *slog.Logger,
 ) (agent.Agent, error) {
 	switch cfg.Agent.Type {
 	case "", agent.TypeReAct:
 		return react.NewReActAgent(
 			provider,
-			react.WithPromptBuilder(promptBuilder),
-			react.WithTools(tools),
 			react.WithLogger(logger),
 			react.WithMaxRounds(cfg.Agent.MaxRounds),
 			react.WithToolTimeout(cfg.Agent.ToolTimeout),
@@ -34,8 +28,6 @@ func newAgent(
 	case agent.TypePlanAndExecute:
 		return planexecute.NewPlanAndExecuteAgent(
 			provider,
-			planexecute.WithPlanPromptBuilder(promptBuilder),
-			planexecute.WithPlanTools(tools),
 			planexecute.WithPlanLogger(logger),
 			planexecute.WithPlanMaxSteps(cfg.Agent.MaxRounds),
 			planexecute.WithPlanToolTimeout(cfg.Agent.ToolTimeout),

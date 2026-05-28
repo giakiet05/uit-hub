@@ -4,11 +4,12 @@ import (
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
 
 // Result is the machine-readable summary written after one eval run.
 type Result struct {
+	usage.TokenUsage
 	CaseID         string               `json:"case_id"`
 	Title          string               `json:"title"`
 	StartedAt      time.Time            `json:"started_at"`
@@ -21,11 +22,8 @@ type Result struct {
 	LLMCalls       int                  `json:"llm_calls"`
 	ToolCalls      int                  `json:"tool_calls"`
 	ToolFailures   int                  `json:"tool_failures"`
-	InputTokens    int                  `json:"input_tokens"`
-	OutputTokens   int                  `json:"output_tokens"`
 	FinalAnswer    string               `json:"final_answer"`
 	ToolCallNames  []string             `json:"tool_call_names"`
-	Usage          llm.Usage            `json:"usage"`
 	CheckResults   []CheckResult        `json:"check_results"`
 }
 

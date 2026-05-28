@@ -8,22 +8,23 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
 func (a *PlanAndExecuteAgent) executeToolCall(
 	ctx context.Context,
 	events chan<- agent.Event,
-	sessionID string,
+	session *session.State,
 	round int,
 	call conversation.ToolCall,
 	stats *agent.RunStats,
 ) (tool.Result, error) {
-	if a.tools == nil {
+	if session.Tools == nil {
 		return tool.Result{}, errors.New("no tools are registered")
 	}
 	stats.ToolCalls++
-	if !loop.Emit(ctx, events, agent.ToolCallStartedEvent{SessionID: sessionID, Round: round, Call: call, Timeout: a.toolTimeout}) {
+	if !loop.Emit(ctx, events, agent.ToolCallStartedEvent{SessionID: session.ID, Round: round, Call: call, Timeout: a.toolTimeout}) {
 		return tool.Result{}, ctx.Err()
 	}
 
@@ -34,7 +35,7 @@ func (a *PlanAndExecuteAgent) executeToolCall(
 		defer cancel()
 	}
 	startedAt := time.Now()
-	result, err := a.tools.Execute(toolCtx, tool.Call{
+	result, err := session.ExecuteTool(toolCtx, tool.Call{
 		ID:        call.ID,
 		Name:      call.Name,
 		Arguments: call.Arguments,
@@ -44,7 +45,7 @@ func (a *PlanAndExecuteAgent) executeToolCall(
 		stats.ToolFailures++
 		observation := loop.ToolErrorObservation(err)
 		loop.Emit(ctx, events, agent.ToolCallFailedEvent{
-			SessionID:   sessionID,
+			SessionID:   session.ID,
 			Round:       round,
 			Call:        call,
 			Observation: observation,
@@ -54,22 +55,15 @@ func (a *PlanAndExecuteAgent) executeToolCall(
 	}
 
 	result = loop.NormalizeToolResult(call, result)
-	a.tools.MarkUsed(call.Name)
-	if !loop.Emit(ctx, events, agent.ToolCallCompletedEvent{SessionID: sessionID, Round: round, Result: result, Duration: duration}) {
+	session.MarkToolUsed(call.Name)
+	if !loop.Emit(ctx, events, agent.ToolCallCompletedEvent{SessionID: session.ID, Round: round, Result: result, Duration: duration}) {
 		return tool.Result{}, ctx.Err()
 	}
 	return result, nil
 }
 
-func (a *PlanAndExecuteAgent) getToolDefinitions() []tool.Definition {
-	if a.tools == nil {
-		return nil
-	}
-	return a.tools.Definitions()
-}
-
-func (a *PlanAndExecuteAgent) stepToolDefinitions(step planStep) []tool.Definition {
-	if a.tools == nil {
+func (a *PlanAndExecuteAgent) stepToolDefinitions(session *session.State, step planStep) []tool.Definition {
+	if session.Tools == nil {
 		return nil
 	}
 
@@ -92,7 +86,7 @@ func (a *PlanAndExecuteAgent) stepToolDefinitions(step planStep) []tool.Definiti
 		}
 		seen[name] = struct{}{}
 
-		definition, exists := a.tools.Definition(name)
+		definition, exists := session.ToolDefinition(name)
 		if !exists {
 			continue
 		}
@@ -100,7 +94,7 @@ func (a *PlanAndExecuteAgent) stepToolDefinitions(step planStep) []tool.Definiti
 	}
 
 	if len(definitions) == 0 {
-		return a.tools.Definitions()
+		return session.ToolDefinitions()
 	}
 	return definitions
 }

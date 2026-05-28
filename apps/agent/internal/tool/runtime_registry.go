@@ -8,7 +8,7 @@ import (
 
 const defaultRuntimeRegistryLimit = 20
 
-// RuntimeRegistry stores tools discovered while an agent run is active.
+// RuntimeRegistry stores tools discovered while a session is active.
 type RuntimeRegistry struct {
 	tools          map[string]Tool
 	definitions    map[string]Definition

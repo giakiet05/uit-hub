@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 
 type model struct {
 	ctx              context.Context
-	session          *runtime.Session
+	session          *session.State
 	agent            agent.Agent
 	logs             *LogBuffer
 	width            int
@@ -84,7 +84,7 @@ type logRefreshMsg struct {
 }
 
 // newModel creates the Bubble Tea model and initializes viewports and input.
-func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.Agent, logs *LogBuffer, initialPrompt string) model {
+func newModel(ctx context.Context, session *session.State, runtimeAgent agent.Agent, logs *LogBuffer, initialPrompt string) model {
 	initialPrompt = strings.TrimSpace(initialPrompt)
 	conversationView := viewport.New(1, 1)
 	conversationView.MouseWheelDelta = mouseScrollLines
@@ -639,7 +639,7 @@ func logValueStyle(key string, value string) lipgloss.Style {
 }
 
 // runAgent starts an agent event stream as a Bubble Tea command.
-func runAgent(ctx context.Context, runtimeAgent agent.Agent, session *runtime.Session, prompt string) tea.Cmd {
+func runAgent(ctx context.Context, runtimeAgent agent.Agent, session *session.State, prompt string) tea.Cmd {
 	stream := runtimeAgent.Run(ctx, session, prompt)
 	return waitAgentEvent(stream)
 }

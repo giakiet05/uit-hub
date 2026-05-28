@@ -8,9 +8,7 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 const defaultMaxToolIterations = 8
@@ -19,12 +17,10 @@ const defaultToolTimeout = 15 * time.Second
 // ReActAgent implements the baseline reason-act-observe loop for tool-calling
 // agents.
 type ReActAgent struct {
-	provider      llm.Provider
-	promptBuilder *prompt.Builder
-	tools         *tool.ToolSet
-	logger        *slog.Logger
-	maxRounds     int
-	toolTimeout   time.Duration
+	provider    llm.Provider
+	logger      *slog.Logger
+	maxRounds   int
+	toolTimeout time.Duration
 }
 
 // ReActOption configures optional ReActAgent dependencies and limits.
@@ -33,11 +29,10 @@ type ReActOption func(*ReActAgent)
 // NewReActAgent constructs a ReActAgent with defaults, then applies overrides.
 func NewReActAgent(provider llm.Provider, opts ...ReActOption) *ReActAgent {
 	agent := &ReActAgent{
-		provider:      provider,
-		promptBuilder: prompt.NewBuilder(prompt.SessionPrompt{}),
-		logger:        logging.NewNopLogger(),
-		maxRounds:     defaultMaxToolIterations,
-		toolTimeout:   defaultToolTimeout,
+		provider:    provider,
+		logger:      logging.NewNopLogger(),
+		maxRounds:   defaultMaxToolIterations,
+		toolTimeout: defaultToolTimeout,
 	}
 
 	for _, opt := range opts {
@@ -45,22 +40,6 @@ func NewReActAgent(provider llm.Provider, opts ...ReActOption) *ReActAgent {
 	}
 
 	return agent
-}
-
-// WithPromptBuilder overrides the prompt builder.
-func WithPromptBuilder(promptBuilder *prompt.Builder) ReActOption {
-	return func(agent *ReActAgent) {
-		if promptBuilder != nil {
-			agent.promptBuilder = promptBuilder
-		}
-	}
-}
-
-// WithTools sets the tool collection used by the agent.
-func WithTools(tools *tool.ToolSet) ReActOption {
-	return func(agent *ReActAgent) {
-		agent.tools = tools
-	}
 }
 
 // WithLogger sets the structured logger.
@@ -94,7 +73,7 @@ func WithToolTimeout(timeout time.Duration) ReActOption {
 
 // Run appends the user prompt to the session and streams loop events until the
 // model returns a final answer or the configured round limit is reached.
-func (a *ReActAgent) Run(ctx context.Context, session *runtime.Session, userPrompt string) <-chan agent.Event {
+func (a *ReActAgent) Run(ctx context.Context, session *session.State, userPrompt string) <-chan agent.Event {
 	events := make(chan agent.Event)
 	go a.run(ctx, events, session, userPrompt)
 	return events

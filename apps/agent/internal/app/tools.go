@@ -20,28 +20,14 @@ const (
 	mcpLoadAttemptTimeout = 3 * time.Second
 )
 
-// newToolSet registers base tools and prepares deferred MCP tool loading.
-func newToolSet(
+// newMCPManager connects configured MCP servers and stores their tool catalog
+// for session prompt construction and deferred tool loading.
+func newMCPManager(
 	ctx context.Context,
 	cfg config.Config,
 	logger *slog.Logger,
-	memoryStore memory.Store,
-) (*tool.ToolSet, *mcpadapter.Manager, []io.Closer, error) {
-	runtimeRegistry := tool.NewRuntimeRegistry(cfg.Tool.RuntimeLimit)
+) (*mcpadapter.Manager, []io.Closer, error) {
 	mcpManager := mcpadapter.NewManager()
-
-	baseRegistry, err := tool.NewBaseRegistry(
-		localtool.NewCalculator(),
-		localtool.NewReadFile("tmp/agent-files"),
-		localtool.NewWriteFile("tmp/agent-files"),
-		localtool.NewMemoryRead(memoryStore),
-		localtool.NewMemoryWrite(memoryStore),
-		localtool.NewMemoryList(memoryStore),
-		localtool.NewLoadMCPTool(mcpManager, runtimeRegistry),
-	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
 
 	reports := loadMCPServers(ctx, cfg)
 	var loadedServers int
@@ -93,13 +79,40 @@ func newToolSet(
 	)
 
 	closers := []io.Closer{mcpManager}
-	return tool.NewToolSet(baseRegistry, runtimeRegistry), mcpManager, closers, nil
+	return mcpManager, closers, nil
+}
+
+// newSessionToolSet registers session-visible base tools and creates a
+// session-scoped runtime registry for deferred MCP tools.
+func newSessionToolSet(
+	cfg config.Config,
+	memoryStore memory.Store,
+	mcpManager *mcpadapter.Manager,
+) (*tool.ToolSet, error) {
+	runtimeRegistry := tool.NewRuntimeRegistry(cfg.Tool.RuntimeLimit)
+
+	baseRegistry, err := tool.NewBaseRegistry(
+		localtool.NewCalculator(),
+		localtool.NewReadFile("tmp/agent-files"),
+		localtool.NewWriteFile("tmp/agent-files"),
+		localtool.NewMemoryRead(memoryStore),
+		localtool.NewMemoryWrite(memoryStore),
+		localtool.NewMemoryList(memoryStore),
+		localtool.NewLoadMCPTool(mcpManager, runtimeRegistry),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return tool.NewToolSet(baseRegistry, runtimeRegistry), nil
 }
 
 func closeAll(ctx context.Context, logger *slog.Logger, closers []io.Closer) {
 	for _, closer := range closers {
 		if err := closer.Close(); err != nil {
-			logger.DebugContext(ctx, "Close resource failed", "error", err)
+			if logger != nil {
+				logger.DebugContext(ctx, "Close resource failed", "error", err)
+			}
 		}
 	}
 }

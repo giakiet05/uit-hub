@@ -6,18 +6,18 @@ import (
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 func (a *PlanAndExecuteAgent) createPlan(
 	ctx context.Context,
 	events chan<- agent.Event,
-	session *runtime.Session,
+	session *session.State,
 	userPrompt string,
 	stats *agent.RunStats,
 ) (executionPlan, error) {
-	messages := a.promptBuilder.BuildAgentMessages(nil, []conversation.Message{
-		conversation.NewUserMessage(plannerPrompt(userPrompt, a.getToolDefinitions())),
+	messages := session.BuildMessages(nil, []conversation.Message{
+		conversation.NewUserMessage(plannerPrompt(userPrompt, session.ToolDefinitions())),
 	})
 	response, err := a.callModel(ctx, events, session.ID, 0, messages, nil, stats)
 	if err != nil {

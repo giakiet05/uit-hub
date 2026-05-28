@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
 
 // Event is the closed set of events emitted by an agent loop.
@@ -49,7 +49,7 @@ type ModelCallStartedEvent struct {
 type ModelCallCompletedEvent struct {
 	SessionID     string
 	Round         int
-	Usage         llm.Usage
+	Usage         usage.TokenUsage
 	Duration      time.Duration
 	ToolCallNames []string
 	MessageText   string

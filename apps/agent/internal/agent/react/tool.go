@@ -9,32 +9,24 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
-
-// getToolDefinitions returns the current tool definitions, or nil when the
-// agent has no registry.
-func (a *ReActAgent) getToolDefinitions() []tool.Definition {
-	if a.tools == nil {
-		return nil
-	}
-	return a.tools.Definitions()
-}
 
 // executeToolCalls runs every requested tool call and appends each observation
 // back into the session conversation.
 func (a *ReActAgent) executeToolCalls(
 	ctx context.Context,
 	events chan<- agent.Event,
-	session *runtime.Session,
+	session *session.State,
 	round int,
 	calls []conversation.ToolCall,
 	stats *agent.RunStats,
 ) bool {
-	if a.tools == nil {
+	if session.Tools == nil {
 		stats.Finish()
 		a.logRunStats(ctx, session.ID, stats)
+		session.AddUsage(agent.UsageDeltaFromRunStats(stats))
 		loop.Emit(ctx, events, agent.RunFailedEvent{
 			SessionID: session.ID,
 			Err:       errors.New("assistant requested tool call but no tools are registered"),
@@ -65,7 +57,7 @@ func (a *ReActAgent) executeToolCalls(
 			"timeout", a.toolTimeout.String(),
 		)
 		toolStartedAt := time.Now()
-		result, err := a.executeToolCall(ctx, call)
+		result, err := a.executeToolCall(ctx, session, call)
 		toolDuration := time.Since(toolStartedAt)
 		if err != nil {
 			stats.ToolFailures++
@@ -99,7 +91,7 @@ func (a *ReActAgent) executeToolCalls(
 
 		result = loop.NormalizeToolResult(call, result)
 		if err == nil {
-			a.tools.MarkUsed(call.Name)
+			session.MarkToolUsed(call.Name)
 			if !loop.Emit(ctx, events, agent.ToolCallCompletedEvent{
 				SessionID: session.ID,
 				Round:     round,
@@ -128,14 +120,14 @@ func (a *ReActAgent) executeToolCalls(
 }
 
 // executeToolCall runs a single tool call with the configured timeout.
-func (a *ReActAgent) executeToolCall(ctx context.Context, call conversation.ToolCall) (tool.Result, error) {
+func (a *ReActAgent) executeToolCall(ctx context.Context, session *session.State, call conversation.ToolCall) (tool.Result, error) {
 	if a.toolTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, a.toolTimeout)
 		defer cancel()
 	}
 
-	result, err := a.tools.Execute(ctx, tool.Call{
+	result, err := session.ExecuteTool(ctx, tool.Call{
 		ID:        call.ID,
 		Name:      call.Name,
 		Arguments: call.Arguments,

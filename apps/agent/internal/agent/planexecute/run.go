@@ -6,25 +6,28 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
-func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event, session *runtime.Session, userPrompt string) {
+func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event, session *session.State, userPrompt string) {
 	defer close(events)
 
-	stats := agent.NewRunStats()
+	runState := agent.NewRunState(session.ID, a.maxSteps)
+	stats := runState.Stats
 	fail := func(err error) {
-		stats.Finish()
+		runState.Finish()
 		a.logRunStats(ctx, session.ID, stats)
+		session.AddUsage(agent.UsageDeltaFromRunStats(stats))
 		loop.Emit(ctx, events, agent.RunFailedEvent{SessionID: session.ID, Err: err, Stats: *stats})
 	}
 	complete := func() {
-		stats.Finish()
+		runState.Finish()
 		a.logRunStats(ctx, session.ID, stats)
+		session.AddUsage(agent.UsageDeltaFromRunStats(stats))
 		loop.Emit(ctx, events, agent.RunCompletedEvent{SessionID: session.ID, Reason: agent.TerminalCompleted, Stats: *stats})
 	}
 
-	if !loop.Emit(ctx, events, agent.RunStartedEvent{SessionID: session.ID, MaxRounds: a.maxSteps}) {
+	if !loop.Emit(ctx, events, agent.RunStartedEvent{SessionID: session.ID, MaxRounds: runState.MaxRounds}) {
 		return
 	}
 	session.Conversation.Append(conversation.NewUserMessage(userPrompt))
@@ -51,6 +54,7 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 	replans := 0
 	for index := 0; index < len(plan.Steps); index++ {
 		step := plan.Steps[index]
+		runState.Round = index + 1
 		stats.Rounds = index + 1
 		if !loop.Emit(ctx, events, agent.StepStartedEvent{
 			SessionID:   session.ID,
