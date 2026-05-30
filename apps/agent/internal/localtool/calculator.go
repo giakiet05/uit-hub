@@ -9,33 +9,35 @@ import (
 )
 
 // Calculator performs basic arithmetic for tool-calling tests.
-type Calculator struct{}
+type Calculator struct {
+	tool.BaseTool
+}
 
 // NewCalculator creates a calculator tool.
 func NewCalculator() *Calculator {
-	return &Calculator{}
-}
-
-// Definition describes the calculator tool schema.
-func (t *Calculator) Definition() tool.Definition {
-	return tool.Definition{
-		Name:        "calculator",
-		Description: "Run a basic arithmetic operation on two numbers.",
-		InputSchema: tool.ObjectSchema(
-			map[string]any{
-				"operation": tool.StringEnumProperty(
-					"The arithmetic operation to run.",
-					"add",
-					"subtract",
-					"multiply",
-					"divide",
+	return &Calculator{
+		BaseTool: tool.NewBaseTool(
+			tool.Definition{
+				Name:        "calculator",
+				Description: "Run a basic arithmetic operation on two numbers.",
+				InputSchema: tool.ObjectSchema(
+					map[string]any{
+						"operation": tool.StringEnumProperty(
+							"The arithmetic operation to run.",
+							"add",
+							"subtract",
+							"multiply",
+							"divide",
+						),
+						"a": tool.NumberProperty("The left operand."),
+						"b": tool.NumberProperty("The right operand."),
+					},
+					"operation",
+					"a",
+					"b",
 				),
-				"a": tool.NumberProperty("The left operand."),
-				"b": tool.NumberProperty("The right operand."),
 			},
-			"operation",
-			"a",
-			"b",
+			tool.NewReadOnlyMetadata(true, tool.DefaultMaxResultChars),
 		),
 	}
 }

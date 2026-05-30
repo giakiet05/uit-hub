@@ -45,6 +45,18 @@ func (s *ToolSet) Definition(name string) (Definition, bool) {
 	return s.runtime.Definition(name)
 }
 
+// Tool returns one visible tool by name, preferring base tools over runtime
+// tools when names collide.
+func (s *ToolSet) Tool(name string) (Tool, bool) {
+	if s == nil {
+		return nil, false
+	}
+	if selected, exists := s.base.Tool(name); exists {
+		return selected, true
+	}
+	return s.runtime.Tool(name)
+}
+
 // Execute runs a tool from the base registry first, then the runtime registry.
 func (s *ToolSet) Execute(ctx context.Context, call Call) (Result, error) {
 	if s == nil {

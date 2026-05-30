@@ -39,7 +39,7 @@ func (r *Runner) RunCase(ctx context.Context, testCase Case, outputRoot string) 
 	defer runtime.Close(ctx)
 
 	recorder := NewRecorder(testCase)
-	events := runtime.Agent.Run(ctx, runtime.Session, testCase.Prompt)
+	events := runtime.Session.Run(ctx, testCase.Prompt)
 	recorder.Consume(ctx, events)
 
 	result := recorder.Finish(Judge(testCase, recorder.result))

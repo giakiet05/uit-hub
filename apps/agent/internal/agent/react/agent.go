@@ -8,7 +8,6 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 const defaultMaxToolIterations = 8
@@ -73,8 +72,8 @@ func WithToolTimeout(timeout time.Duration) ReActOption {
 
 // Run appends the user prompt to the session and streams loop events until the
 // model returns a final answer or the configured round limit is reached.
-func (a *ReActAgent) Run(ctx context.Context, session *session.State, userPrompt string) <-chan agent.Event {
+func (a *ReActAgent) Run(ctx context.Context, input agent.RunInput) <-chan agent.Event {
 	events := make(chan agent.Event)
-	go a.run(ctx, events, session, userPrompt)
+	go a.run(ctx, events, input)
 	return events
 }

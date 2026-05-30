@@ -6,23 +6,21 @@ import (
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 func (a *PlanAndExecuteAgent) replan(
 	ctx context.Context,
 	events chan<- agent.Event,
-	session *session.State,
-	userPrompt string,
+	input agent.RunInput,
 	plan executionPlan,
 	results []stepResult,
 	state executionState,
 	stats *agent.RunStats,
 ) (executionPlan, error) {
-	messages := session.BuildMessages(nil, []conversation.Message{
-		conversation.NewUserMessage(replannerPrompt(userPrompt, plan, results, state)),
+	messages := input.BuildMessages(nil, []conversation.Message{
+		conversation.NewUserMessage(replannerPrompt(input.UserPrompt, plan, results, state)),
 	})
-	response, err := a.callModel(ctx, events, session.ID, stats.Rounds, messages, nil, stats)
+	response, err := a.callModel(ctx, events, input.SessionID, stats.Rounds, messages, nil, stats)
 	if err != nil {
 		return executionPlan{}, err
 	}

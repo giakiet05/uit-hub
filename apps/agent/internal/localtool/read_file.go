@@ -11,25 +11,27 @@ import (
 
 // ReadFile reads text files from a configured sandbox root.
 type ReadFile struct {
+	tool.BaseTool
 	rootDir string
 }
 
 // NewReadFile creates a sandboxed file-reading tool.
 func NewReadFile(rootDir string) *ReadFile {
-	return &ReadFile{rootDir: rootDir}
-}
-
-// Definition describes the sandboxed file-reading tool schema.
-func (t *ReadFile) Definition() tool.Definition {
-	return tool.Definition{
-		Name:        "read_file",
-		Description: "Read text content from a file inside the agent file sandbox.",
-		InputSchema: tool.ObjectSchema(
-			map[string]any{
-				"path": tool.StringProperty("Relative file path inside the sandbox, for example notes/result.txt."),
+	return &ReadFile{
+		BaseTool: tool.NewBaseTool(
+			tool.Definition{
+				Name:        "read_file",
+				Description: "Read text content from a file inside the agent file sandbox.",
+				InputSchema: tool.ObjectSchema(
+					map[string]any{
+						"path": tool.StringProperty("Relative file path inside the sandbox, for example notes/result.txt."),
+					},
+					"path",
+				),
 			},
-			"path",
+			tool.NewReadOnlyMetadata(false, tool.DefaultMaxResultChars),
 		),
+		rootDir: rootDir,
 	}
 }
 

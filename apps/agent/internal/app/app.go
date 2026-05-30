@@ -51,7 +51,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	}
 	defer runtime.Close(ctx)
 
-	runner := tui.NewRunner(runtime.Session, runtime.Agent, stdin, stdout, logBuffer, initialPrompt)
+	runner := tui.NewRunner(runtime.Session, stdin, stdout, logBuffer, initialPrompt)
 	if err := runner.Run(ctx); err != nil {
 		logger.DebugContext(ctx, "Agent TUI stopped with error", "error", err)
 		return err

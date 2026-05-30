@@ -2,15 +2,9 @@ package react
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"time"
-
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
 // executeToolCalls runs every requested tool call and appends each observation
@@ -18,122 +12,32 @@ import (
 func (a *ReActAgent) executeToolCalls(
 	ctx context.Context,
 	events chan<- agent.Event,
-	session *session.State,
+	input agent.RunInput,
 	round int,
 	calls []conversation.ToolCall,
 	stats *agent.RunStats,
 ) bool {
-	if session.Tools == nil {
-		stats.Finish()
-		a.logRunStats(ctx, session.ID, stats)
-		session.AddUsage(agent.UsageDeltaFromRunStats(stats))
-		loop.Emit(ctx, events, agent.RunFailedEvent{
-			SessionID: session.ID,
-			Err:       errors.New("assistant requested tool call but no tools are registered"),
-			Stats:     *stats,
-		})
+	results, ok := agent.RunToolBatch(ctx, a.logger, "react", events, input, round, calls, a.toolTimeout, stats)
+	if !ok {
 		return false
 	}
 
-	for _, call := range calls {
-		stats.ToolCalls++
-		if !loop.Emit(ctx, events, agent.ToolCallStartedEvent{
-			SessionID: session.ID,
-			Round:     round,
-			Call:      call,
-			Timeout:   a.toolTimeout,
-		}) {
-			return false
-		}
-		a.trace(
-			ctx,
-			"react.tool.started",
-			fmt.Sprintf("Round %d: Tool %s started", round, call.Name),
-			"session_id", session.ID,
-			"round", round,
-			"tool_call_id", call.ID,
-			"tool_name", call.Name,
-			"arguments_preview", loop.PreviewValue(call.Arguments),
-			"timeout", a.toolTimeout.String(),
-		)
-		toolStartedAt := time.Now()
-		result, err := a.executeToolCall(ctx, session, call)
-		toolDuration := time.Since(toolStartedAt)
-		if err != nil {
-			stats.ToolFailures++
-			observation := loop.ToolErrorObservation(err)
-			a.trace(
-				ctx,
-				"react.tool.failed",
-				fmt.Sprintf("Round %d: Tool %s failed", round, call.Name),
-				"session_id", session.ID,
-				"round", round,
-				"tool_call_id", call.ID,
-				"tool_name", call.Name,
-				"duration", toolDuration.String(),
-				"error", err,
-			)
-			result = tool.Result{
-				CallID:  call.ID,
-				Name:    call.Name,
-				Content: observation,
-			}
-			if !loop.Emit(ctx, events, agent.ToolCallFailedEvent{
-				SessionID:   session.ID,
-				Round:       round,
-				Call:        call,
-				Observation: observation,
-				Duration:    toolDuration,
-			}) {
-				return false
-			}
-		}
-
-		result = loop.NormalizeToolResult(call, result)
-		if err == nil {
-			session.MarkToolUsed(call.Name)
-			if !loop.Emit(ctx, events, agent.ToolCallCompletedEvent{
-				SessionID: session.ID,
-				Round:     round,
-				Result:    result,
-				Duration:  toolDuration,
-			}) {
-				return false
-			}
-		}
-		session.Conversation.Append(conversation.NewToolResultMessage(result.CallID, result.Content))
-		a.trace(
+	for _, result := range results {
+		input.Conversation.Append(conversation.NewToolResultMessage(result.CallID, result.Content))
+		agent.Trace(
+			a.logger,
 			ctx,
 			"react.tool.observation_appended",
 			fmt.Sprintf("Round %d: Observe %s", round, result.Name),
-			"session_id", session.ID,
+			"session_id", input.SessionID,
 			"round", round,
 			"tool_call_id", result.CallID,
 			"tool_name", result.Name,
 			"result_chars", len(result.Content),
-			"result_preview", loop.PreviewText(result.Content),
-			"duration", toolDuration.String(),
+			"result_preview", agent.PreviewText(result.Content),
+			// toolDuration is no longer available here per result, but that's okay for trace.
 		)
 	}
 
 	return true
-}
-
-// executeToolCall runs a single tool call with the configured timeout.
-func (a *ReActAgent) executeToolCall(ctx context.Context, session *session.State, call conversation.ToolCall) (tool.Result, error) {
-	if a.toolTimeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, a.toolTimeout)
-		defer cancel()
-	}
-
-	result, err := session.ExecuteTool(ctx, tool.Call{
-		ID:        call.ID,
-		Name:      call.Name,
-		Arguments: call.Arguments,
-	})
-	if err != nil {
-		return tool.Result{}, fmt.Errorf("execute tool call: %w", err)
-	}
-	return result, nil
 }

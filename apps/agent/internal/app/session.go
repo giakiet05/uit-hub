@@ -7,9 +7,9 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
-// newSession creates one chat session with stable memory, prompt, and tool
+// newSessionState creates one chat session with stable memory, prompt, and tool
 // snapshots.
-func newSession(ctx context.Context, state *State) (*session.State, error) {
+func newSessionState(ctx context.Context, state *State) (*session.State, error) {
 	memoryContext, err := memory.NewLoader(state.MemoryStore).Load(ctx)
 	if err != nil {
 		state.Logger.DebugContext(ctx, "Memory context load failed", "error", err)
@@ -25,5 +25,6 @@ func newSession(ctx context.Context, state *State) (*session.State, error) {
 	return session.NewState(
 		session.WithPromptSnapshot(promptSnapshot),
 		session.WithTools(tools),
+		session.WithConcurrentTools(state.Config.Agent.ConcurrentTools),
 	), nil
 }

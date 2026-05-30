@@ -79,6 +79,16 @@ func (r *RuntimeRegistry) Definition(name string) (Definition, bool) {
 	return definition, exists
 }
 
+// Tool returns one runtime tool by name.
+func (r *RuntimeRegistry) Tool(name string) (Tool, bool) {
+	if r == nil {
+		return nil, false
+	}
+
+	selected, exists := r.tools[name]
+	return selected, exists
+}
+
 // Definitions returns runtime tool definitions in registration order.
 func (r *RuntimeRegistry) Definitions() []Definition {
 	if r == nil {

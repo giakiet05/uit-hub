@@ -21,8 +21,9 @@ func MCPToolCatalogDynamicPrompt(catalog []mcpadapter.ToolMetadata) DynamicPart 
 	var builder strings.Builder
 	builder.WriteString("## MCP Tool Catalog\n\n")
 	builder.WriteString("MCP servers expose external capabilities. Each catalog entry has format: tool_name: short description.\n")
-	builder.WriteString("Use load_mcp_tool with the exact tool name before using any catalog tool or inspecting its input schema. ")
-	builder.WriteString("After loading a tool, use it in the next round.\n\n")
+	builder.WriteString("Use load_mcp_tool with the EXACT FULL namespaced tool name exactly as shown in the catalog. Do NOT pass just the server name.\n")
+	builder.WriteString("After loading a tool, use it in the next round. ")
+	builder.WriteString("Load each MCP tool at most once, then call the loaded tool directly as many times as needed with different arguments.\n\n")
 
 	for _, server := range groupMCPToolsByServer(catalog) {
 		builder.WriteString("### ")

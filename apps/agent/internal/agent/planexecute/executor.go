@@ -5,34 +5,31 @@ import (
 	"fmt"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 func (a *PlanAndExecuteAgent) executeStep(
 	ctx context.Context,
 	events chan<- agent.Event,
-	session *session.State,
-	userPrompt string,
+	input agent.RunInput,
 	step planStep,
 	state executionState,
 	stats *agent.RunStats,
 ) (stepResult, error) {
-	stepMessages := session.BuildMessages(nil, []conversation.Message{
-		conversation.NewUserMessage(executorPrompt(userPrompt, step, state)),
+	stepMessages := input.BuildMessages(nil, []conversation.Message{
+		conversation.NewUserMessage(executorPrompt(input.UserPrompt, step, state)),
 	})
 	toolCalls := []string{}
 	observations := []string{}
 
 	for round := 1; round <= a.maxStepRounds; round++ {
-		response, err := a.callModel(ctx, events, session.ID, stats.Rounds, stepMessages, a.stepToolDefinitions(session, step), stats)
+		response, err := a.callModel(ctx, events, input.SessionID, stats.Rounds, stepMessages, a.stepToolDefinitions(input, step), stats)
 		if err != nil {
 			return stepResult{}, err
 		}
 
 		stepMessages = append(stepMessages, response.Message)
-		calls := loop.AssistantToolCalls(response.Message)
+		calls := agent.AssistantToolCalls(response.Message)
 		if len(calls) == 0 {
 			result, err := decodeStepResult(step.ID, conversation.Text(response.Message), toolCalls, observations)
 			if err != nil {
@@ -41,14 +38,13 @@ func (a *PlanAndExecuteAgent) executeStep(
 			return result, nil
 		}
 
-		for _, call := range calls {
-			result, err := a.executeToolCall(ctx, events, session, stats.Rounds, call, stats)
-			if err != nil {
-				observations = append(observations, loop.ToolErrorObservation(err))
-				stepMessages = append(stepMessages, conversation.NewToolResultMessage(call.ID, loop.ToolErrorObservation(err)))
-				continue
-			}
-			toolCalls = append(toolCalls, call.Name)
+		results, ok := agent.RunToolBatch(ctx, a.logger, "plan_execute", events, input, stats.Rounds, calls, a.toolTimeout, stats)
+		if !ok {
+			return stepResult{}, ctx.Err()
+		}
+
+		for _, result := range results {
+			toolCalls = append(toolCalls, result.Name)
 			observations = append(observations, result.Content)
 			stepMessages = append(stepMessages, conversation.NewToolResultMessage(result.CallID, result.Content))
 		}

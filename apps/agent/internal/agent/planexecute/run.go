@@ -4,36 +4,32 @@ import (
 	"context"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
-func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event, session *session.State, userPrompt string) {
+func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event, input agent.RunInput) {
 	defer close(events)
 
-	runState := agent.NewRunState(session.ID, a.maxSteps)
+	runState := agent.NewRunState(input.SessionID, a.maxSteps)
 	stats := runState.Stats
 	fail := func(err error) {
 		runState.Finish()
-		a.logRunStats(ctx, session.ID, stats)
-		session.AddUsage(agent.UsageDeltaFromRunStats(stats))
-		loop.Emit(ctx, events, agent.RunFailedEvent{SessionID: session.ID, Err: err, Stats: *stats})
+		agent.LogRunStats(a.logger, "plan_execute", ctx, input.SessionID, stats)
+		agent.Emit(ctx, events, agent.RunFailedEvent{SessionID: input.SessionID, Err: err, Stats: *stats})
 	}
 	complete := func() {
 		runState.Finish()
-		a.logRunStats(ctx, session.ID, stats)
-		session.AddUsage(agent.UsageDeltaFromRunStats(stats))
-		loop.Emit(ctx, events, agent.RunCompletedEvent{SessionID: session.ID, Reason: agent.TerminalCompleted, Stats: *stats})
+		agent.LogRunStats(a.logger, "plan_execute", ctx, input.SessionID, stats)
+		agent.Emit(ctx, events, agent.RunCompletedEvent{SessionID: input.SessionID, Reason: agent.TerminalCompleted, Stats: *stats})
 	}
 
-	if !loop.Emit(ctx, events, agent.RunStartedEvent{SessionID: session.ID, MaxRounds: runState.MaxRounds}) {
+	if !agent.Emit(ctx, events, agent.RunStartedEvent{SessionID: input.SessionID, MaxRounds: runState.MaxRounds}) {
 		return
 	}
-	session.Conversation.Append(conversation.NewUserMessage(userPrompt))
-	a.trace(ctx, "plan_execute.run.started", "Plan-and-execute agent started", "session_id", session.ID, "max_steps", a.maxSteps)
+	input.Conversation.Append(conversation.NewUserMessage(input.UserPrompt))
+	agent.Trace(a.logger, ctx, "plan_execute.run.started", "Plan-and-execute agent started", "session_id", input.SessionID, "max_steps", a.maxSteps)
 
-	plan, err := a.createPlan(ctx, events, session, userPrompt, stats)
+	plan, err := a.createPlan(ctx, events, input, stats)
 	if err != nil {
 		fail(err)
 		return
@@ -41,8 +37,8 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 	if len(plan.Steps) > a.maxSteps {
 		plan.Steps = plan.Steps[:a.maxSteps]
 	}
-	if !loop.Emit(ctx, events, agent.PlanCreatedEvent{
-		SessionID: session.ID,
+	if !agent.Emit(ctx, events, agent.PlanCreatedEvent{
+		SessionID: input.SessionID,
 		StepCount: len(plan.Steps),
 		Summary:   planSummary(plan),
 	}) {
@@ -56,19 +52,19 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 		step := plan.Steps[index]
 		runState.Round = index + 1
 		stats.Rounds = index + 1
-		if !loop.Emit(ctx, events, agent.StepStartedEvent{
-			SessionID:   session.ID,
+		if !agent.Emit(ctx, events, agent.StepStartedEvent{
+			SessionID:   input.SessionID,
 			StepID:      step.ID,
 			Description: step.Description,
 		}) {
 			return
 		}
 
-		result, err := a.executeStep(ctx, events, session, userPrompt, step, state, stats)
+		result, err := a.executeStep(ctx, events, input, step, state, stats)
 		if err != nil {
 			result = stepResult{StepID: step.ID, Status: "failed", Error: err.Error()}
 			results = append(results, result)
-			if !loop.Emit(ctx, events, agent.StepFailedEvent{SessionID: session.ID, StepID: step.ID, Err: err}) {
+			if !agent.Emit(ctx, events, agent.StepFailedEvent{SessionID: input.SessionID, StepID: step.ID, Err: err}) {
 				return
 			}
 			if replans >= a.maxReplans {
@@ -76,16 +72,16 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 				return
 			}
 			replans++
-			if !loop.Emit(ctx, events, agent.ReplanStartedEvent{SessionID: session.ID, StepID: step.ID}) {
+			if !agent.Emit(ctx, events, agent.ReplanStartedEvent{SessionID: input.SessionID, StepID: step.ID}) {
 				return
 			}
-			updated, err := a.replan(ctx, events, session, userPrompt, plan, results, state, stats)
+			updated, err := a.replan(ctx, events, input, plan, results, state, stats)
 			if err != nil {
 				fail(err)
 				return
 			}
 			plan = updated
-			if !loop.Emit(ctx, events, agent.PlanUpdatedEvent{SessionID: session.ID, Summary: planSummary(plan)}) {
+			if !agent.Emit(ctx, events, agent.PlanUpdatedEvent{SessionID: input.SessionID, Summary: planSummary(plan)}) {
 				return
 			}
 			index = len(results) - 1
@@ -94,23 +90,23 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 
 		results = append(results, result)
 		state.apply(result)
-		if !loop.Emit(ctx, events, agent.StepCompletedEvent{SessionID: session.ID, StepID: step.ID, Summary: result.Summary}) {
+		if !agent.Emit(ctx, events, agent.StepCompletedEvent{SessionID: input.SessionID, StepID: step.ID, Summary: result.Summary}) {
 			return
 		}
 	}
 
-	if !loop.Emit(ctx, events, agent.FinalizingEvent{SessionID: session.ID}) {
+	if !agent.Emit(ctx, events, agent.FinalizingEvent{SessionID: input.SessionID}) {
 		return
 	}
-	answer, err := a.finalize(ctx, events, session, userPrompt, plan, results, state, stats)
+	answer, err := a.finalize(ctx, events, input, plan, results, state, stats)
 	if err != nil {
 		fail(err)
 		return
 	}
-	session.Conversation.Append(answer)
-	if !loop.Emit(ctx, events, agent.FinalAnswerEvent{SessionID: session.ID, Round: stats.Rounds, Message: answer}) {
+	input.Conversation.Append(answer)
+	if !agent.Emit(ctx, events, agent.FinalAnswerEvent{SessionID: input.SessionID, Round: stats.Rounds, Message: answer}) {
 		return
 	}
-	a.trace(ctx, "plan_execute.run.completed", "Plan-and-execute agent completed", "session_id", session.ID, "steps", len(results))
+	agent.Trace(a.logger, ctx, "plan_execute.run.completed", "Plan-and-execute agent completed", "session_id", input.SessionID, "steps", len(results))
 	complete()
 }

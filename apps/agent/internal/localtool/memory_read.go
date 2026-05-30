@@ -11,25 +11,27 @@ import (
 
 // MemoryRead reads one saved memory by ID.
 type MemoryRead struct {
+	tool.BaseTool
 	store memory.Store
 }
 
 // NewMemoryRead creates a memory reading tool.
 func NewMemoryRead(store memory.Store) *MemoryRead {
-	return &MemoryRead{store: store}
-}
-
-// Definition describes the memory_read tool schema.
-func (t *MemoryRead) Definition() tool.Definition {
-	return tool.Definition{
-		Name:        "memory_read",
-		Description: "Read one saved long-term memory by id when the memory index indicates it may be relevant.",
-		InputSchema: tool.ObjectSchema(
-			map[string]any{
-				"id": tool.StringProperty("Memory ID to read."),
+	return &MemoryRead{
+		BaseTool: tool.NewBaseTool(
+			tool.Definition{
+				Name:        "memory_read",
+				Description: "Read one saved long-term memory by id when the memory index indicates it may be relevant.",
+				InputSchema: tool.ObjectSchema(
+					map[string]any{
+						"id": tool.StringProperty("Memory ID to read."),
+					},
+					"id",
+				),
 			},
-			"id",
+			tool.NewReadOnlyMetadata(false, tool.DefaultMaxResultChars),
 		),
+		store: store,
 	}
 }
 

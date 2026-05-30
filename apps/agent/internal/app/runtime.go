@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
@@ -12,8 +11,7 @@ import (
 // Runtime owns the reusable agent core shared by TUI and eval frontends.
 type Runtime struct {
 	State   *State
-	Agent   agent.Agent
-	Session *session.State
+	Session *session.Session
 }
 
 // NewRuntime wires provider, memory, tools, prompt, and session state.
@@ -40,7 +38,7 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger) (*R
 		Closers:     closers,
 	}
 
-	sessionState, err := newSession(ctx, state)
+	sessionState, err := newSessionState(ctx, state)
 	if err != nil {
 		logger.DebugContext(ctx, "Session initialization failed", "error", err)
 		closeAll(ctx, logger, closers)
@@ -54,10 +52,19 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger) (*R
 		return nil, err
 	}
 
+	logger.DebugContext(ctx, "Startup configuration",
+		"provider", cfg.Provider,
+		"agent_type", cfg.Agent.Type,
+		"agent_max_rounds", cfg.Agent.MaxRounds,
+		"agent_concurrent_tools", cfg.Agent.ConcurrentTools,
+		"agent_tool_timeout", cfg.Agent.ToolTimeout.String(),
+		"mcp_servers", len(cfg.MCP.Servers),
+		"session_tools", len(sessionState.ToolDefinitions()),
+	)
+
 	return &Runtime{
 		State:   state,
-		Agent:   runtimeAgent,
-		Session: sessionState,
+		Session: session.NewSession(sessionState, runtimeAgent),
 	}, nil
 }
 

@@ -26,8 +26,9 @@ type Config struct {
 // AgentConfig contains agent loop limits.
 type AgentConfig struct {
 	Type        agent.Type
-	MaxRounds   int
-	ToolTimeout time.Duration
+	MaxRounds       int
+	ToolTimeout     time.Duration
+	ConcurrentTools bool
 }
 
 // MemoryConfig contains long-term memory settings.
@@ -72,8 +73,9 @@ func Load() (Config, error) {
 		Provider: envProviderOrDefault("LLM_PROVIDER", llm.ProviderTypeOpenAI),
 		Agent: AgentConfig{
 			Type:        agent.Type(envOrDefault("AGENT_TYPE", agent.TypeReAct.String())),
-			MaxRounds:   envIntOrDefault("AGENT_MAX_ROUNDS", 0),
-			ToolTimeout: envDurationOrDefault("AGENT_TOOL_TIMEOUT", 15*time.Second),
+			MaxRounds:       envIntOrDefault("AGENT_MAX_ROUNDS", 0),
+			ToolTimeout:     envDurationOrDefault("AGENT_TOOL_TIMEOUT", 15*time.Second),
+			ConcurrentTools: envBoolOrDefault("AGENT_CONCURRENT_TOOLS", true),
 		},
 		Memory: MemoryConfig{
 			Path: envOrDefault("MEMORY_PATH", "memory"),

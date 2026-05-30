@@ -6,14 +6,12 @@ import (
 	"io"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 // Runner owns the Bubble Tea program setup for the agent TUI.
 type Runner struct {
-	session       *session.State
-	agent         agent.Agent
+	session       *session.Session
 	stdin         io.Reader
 	stdout        io.Writer
 	logs          *LogBuffer
@@ -21,10 +19,9 @@ type Runner struct {
 }
 
 // NewRunner creates a TUI runner for one session.
-func NewRunner(session *session.State, runtimeAgent agent.Agent, stdin io.Reader, stdout io.Writer, logs *LogBuffer, initialPrompt string) *Runner {
+func NewRunner(session *session.Session, stdin io.Reader, stdout io.Writer, logs *LogBuffer, initialPrompt string) *Runner {
 	return &Runner{
 		session:       session,
-		agent:         runtimeAgent,
 		stdin:         stdin,
 		stdout:        stdout,
 		logs:          logs,
@@ -34,7 +31,7 @@ func NewRunner(session *session.State, runtimeAgent agent.Agent, stdin io.Reader
 
 // Run starts the Bubble Tea event loop.
 func (r *Runner) Run(ctx context.Context) error {
-	model := newModel(ctx, r.session, r.agent, r.logs, r.initialPrompt)
+	model := newModel(ctx, r.session, r.logs, r.initialPrompt)
 	program := tea.NewProgram(
 		model,
 		tea.WithContext(ctx),

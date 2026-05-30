@@ -76,6 +76,16 @@ func (r *BaseRegistry) Definition(name string) (Definition, bool) {
 	return definition, exists
 }
 
+// Tool returns one registered tool by name.
+func (r *BaseRegistry) Tool(name string) (Tool, bool) {
+	if r == nil {
+		return nil, false
+	}
+
+	selected, exists := r.tools[name]
+	return selected, exists
+}
+
 // Definitions returns tool definitions in registration order.
 func (r *BaseRegistry) Definitions() []Definition {
 	if r == nil {

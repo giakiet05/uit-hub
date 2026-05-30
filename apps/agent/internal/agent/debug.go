@@ -1,8 +1,9 @@
-package react
+package agent
 
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,15 +11,15 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 )
 
-// writePromptDebugFile writes the latest LLM message stack for local prompt
-// inspection without exposing it through the TUI log stream.
-func (a *ReActAgent) writePromptDebugFile(ctx context.Context, messages []conversation.Message) {
+// WritePromptDebugFile writes the latest LLM message stack to tmp/prompt.md for
+// local inspection without exposing it through the TUI log stream.
+func WritePromptDebugFile(ctx context.Context, logger *slog.Logger, messages []conversation.Message) {
 	if err := os.MkdirAll("tmp", 0o755); err != nil {
-		a.trace(ctx, "react.prompt_debug.write_failed", "Prompt debug directory creation failed", "error", err)
+		Trace(logger, ctx, "agent.prompt_debug.write_failed", "Prompt debug directory creation failed", "error", err)
 		return
 	}
 	if err := os.WriteFile(filepath.Join("tmp", "prompt.md"), []byte(renderPromptDebug(messages)), 0o600); err != nil {
-		a.trace(ctx, "react.prompt_debug.write_failed", "Prompt debug file write failed", "error", err)
+		Trace(logger, ctx, "agent.prompt_debug.write_failed", "Prompt debug file write failed", "error", err)
 	}
 }
 

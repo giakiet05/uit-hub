@@ -17,7 +17,6 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/localtool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
@@ -27,9 +26,9 @@ func TestReActAgentRunsProvider(t *testing.T) {
 		answerTestProvider{},
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := newTestSession(nil)
+	input := newTestRunInput(nil)
 
-	message := runAgentForAnswer(t, agent, session, "xin chao")
+	message := runAgentForAnswer(t, agent, input, "xin chao")
 
 	if got, want := conversation.Text(message), "received: xin chao"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -42,9 +41,9 @@ func TestReActAgentSendsSystemPromptWithoutStoringItInConversation(t *testing.T)
 		provider,
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := newTestSession(nil)
+	input := newTestRunInput(nil)
 
-	_ = runAgentForAnswer(t, agent, session, "xin chao")
+	_ = runAgentForAnswer(t, agent, input, "xin chao")
 
 	if len(provider.messages) == 0 {
 		t.Fatal("provider received no messages")
@@ -52,7 +51,7 @@ func TestReActAgentSendsSystemPromptWithoutStoringItInConversation(t *testing.T)
 	if _, ok := provider.messages[0].(conversation.SystemMessage); !ok {
 		t.Fatalf("first provider message type = %T, want conversation.SystemMessage", provider.messages[0])
 	}
-	for _, message := range session.Conversation.Messages() {
+	for _, message := range input.Conversation.Messages() {
 		if _, ok := message.(conversation.SystemMessage); ok {
 			t.Fatalf("session conversation stored system message: %#v", message)
 		}
@@ -68,9 +67,9 @@ func TestReActAgentLogsRunStats(t *testing.T) {
 		usageProvider{},
 		WithLogger(logger),
 	)
-	session := newTestSession(nil)
+	input := newTestRunInput(nil)
 
-	_ = runAgentForAnswer(t, agent, session, "track stats")
+	_ = runAgentForAnswer(t, agent, input, "track stats")
 
 	output := logs.String()
 	expectedParts := []string{
@@ -103,9 +102,9 @@ func TestReActAgentLogsTimeline(t *testing.T) {
 		&timelineProvider{},
 		WithLogger(logger),
 	)
-	session := newTestSession(newTestToolSet(registry))
+	input := newTestRunInput(newTestToolSet(registry))
 
-	_ = runAgentForAnswer(t, agent, session, "track timeline")
+	_ = runAgentForAnswer(t, agent, input, "track timeline")
 
 	output := logs.String()
 	expectedParts := []string{
@@ -138,9 +137,9 @@ func TestReActAgentHidesRawToolErrorsFromObservation(t *testing.T) {
 		provider,
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := newTestSession(newTestToolSet(registry))
+	input := newTestRunInput(newTestToolSet(registry))
 
-	message := runAgentForAnswer(t, agent, session, "test failing tool")
+	message := runAgentForAnswer(t, agent, input, "test failing tool")
 
 	if got, want := conversation.Text(message), "handled failure"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -165,9 +164,9 @@ func TestReActAgentTimesOutToolCalls(t *testing.T) {
 		WithLogger(logging.NewNopLogger()),
 		WithToolTimeout(time.Millisecond),
 	)
-	session := newTestSession(newTestToolSet(registry))
+	input := newTestRunInput(newTestToolSet(registry))
 
-	message := runAgentForAnswer(t, agent, session, "test slow tool")
+	message := runAgentForAnswer(t, agent, input, "test slow tool")
 
 	if got, want := conversation.Text(message), "handled timeout"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -188,9 +187,9 @@ func TestReActAgentExecutesToolCalls(t *testing.T) {
 		provider,
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := newTestSession(newTestToolSet(registry))
+	input := newTestRunInput(newTestToolSet(registry))
 
-	message := runAgentForAnswer(t, agent, session, "test tools")
+	message := runAgentForAnswer(t, agent, input, "test tools")
 
 	if got, want := conversation.Text(message), "all tools completed"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -211,9 +210,9 @@ func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
 		provider,
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := newTestSession(newTestToolSet(registry))
+	input := newTestRunInput(newTestToolSet(registry))
 
-	message := runAgentForAnswer(t, agent, session, "multi round")
+	message := runAgentForAnswer(t, agent, input, "multi round")
 
 	if got, want := conversation.Text(message), "multi-round complete"; got != want {
 		t.Fatalf("message text = %q, want %q", got, want)
@@ -221,7 +220,7 @@ func TestReActAgentRunsMultipleToolRounds(t *testing.T) {
 	if got, want := provider.calls, 3; got != want {
 		t.Fatalf("provider calls = %d, want %d", got, want)
 	}
-	if got, want := countToolResults(session.Conversation.Messages()), 2; got != want {
+	if got, want := countToolResults(input.Conversation.Messages()), 2; got != want {
 		t.Fatalf("tool result messages = %d, want %d", got, want)
 	}
 }
@@ -236,9 +235,9 @@ func TestReActAgentEmitsToolEvents(t *testing.T) {
 		&timelineProvider{},
 		WithLogger(logging.NewNopLogger()),
 	)
-	session := newTestSession(newTestToolSet(registry))
+	input := newTestRunInput(newTestToolSet(registry))
 
-	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, "track events"))
+	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), withPrompt(input, "track events")))
 	assertEventType(t, events, agent.RunStartedEvent{})
 	assertEventType(t, events, agent.RoundStartedEvent{})
 	assertEventType(t, events, agent.ModelCallStartedEvent{})
@@ -264,19 +263,19 @@ func TestReActAgentEmitsMaxRounds(t *testing.T) {
 		WithLogger(logging.NewNopLogger()),
 		WithMaxRounds(1),
 	)
-	session := newTestSession(newTestToolSet(registry))
+	input := newTestRunInput(newTestToolSet(registry))
 
-	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, "hit max rounds"))
+	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), withPrompt(input, "hit max rounds")))
 	completed := lastCompletedEvent(t, events)
 	if completed.Reason != agent.TerminalMaxRounds {
 		t.Fatalf("terminal reason = %q, want %q", completed.Reason, agent.TerminalMaxRounds)
 	}
 }
 
-func runAgentForAnswer(t *testing.T, runtimeAgent *ReActAgent, session *session.State, input string) conversation.Message {
+func runAgentForAnswer(t *testing.T, runtimeAgent *ReActAgent, input agent.RunInput, userPrompt string) conversation.Message {
 	t.Helper()
 
-	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), session, input))
+	events := collectAgentEvents(t, runtimeAgent.Run(context.Background(), withPrompt(input, userPrompt)))
 	for _, event := range events {
 		if failed, ok := event.(agent.RunFailedEvent); ok {
 			t.Fatalf("Run() failed: %v", failed.Err)
@@ -547,6 +546,10 @@ func (t errorTool) Definition() tool.Definition {
 	}
 }
 
+func (t errorTool) Metadata() tool.Metadata {
+	return tool.NewReadOnlyMetadata(true, tool.DefaultMaxResultChars)
+}
+
 func (t errorTool) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {
 	return tool.Result{}, errors.New("database password leaked")
 }
@@ -559,6 +562,10 @@ func (t blockingTool) Definition() tool.Definition {
 		Description: "Blocks until context cancellation.",
 		InputSchema: tool.EmptyInputSchema(),
 	}
+}
+
+func (t blockingTool) Metadata() tool.Metadata {
+	return tool.NewReadOnlyMetadata(true, tool.DefaultMaxResultChars)
 }
 
 func (t blockingTool) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {
@@ -595,11 +602,19 @@ func newTestToolSet(registry *tool.BaseRegistry) *tool.ToolSet {
 	return tool.NewToolSet(registry, tool.NewRuntimeRegistry(20))
 }
 
-func newTestSession(tools *tool.ToolSet) *session.State {
-	return session.NewState(
-		session.WithPromptSnapshot(prompt.SessionPrompt{
+func newTestRunInput(tools *tool.ToolSet) agent.RunInput {
+	conv := conversation.NewConversation()
+	return agent.RunInput{
+		SessionID:    "session-test",
+		Conversation: &conv,
+		PromptSnapshot: prompt.SessionPrompt{
 			DynamicParts: []prompt.DynamicPart{"system"},
-		}),
-		session.WithTools(tools),
-	)
+		},
+		Tools: tools,
+	}
+}
+
+func withPrompt(input agent.RunInput, userPrompt string) agent.RunInput {
+	input.UserPrompt = userPrompt
+	return input
 }

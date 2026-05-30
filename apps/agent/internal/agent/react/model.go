@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 )
 
@@ -22,7 +21,7 @@ func (a *ReActAgent) generate(ctx context.Context, events chan<- agent.Event, ro
 		switch typed := event.(type) {
 		case llm.TextDeltaEvent:
 			textStreamed = true
-			if !loop.Emit(ctx, events, agent.ModelTextDeltaEvent{
+			if !agent.Emit(ctx, events, agent.ModelTextDeltaEvent{
 				SessionID: request.SessionID,
 				Round:     round,
 				Delta:     typed.Delta,

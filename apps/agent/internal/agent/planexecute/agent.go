@@ -8,7 +8,6 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 const (
@@ -19,7 +18,7 @@ const (
 )
 
 // PlanAndExecuteAgent implements a single-agent planner/executor/finalizer
-// loop. The runtime owns orchestration: every step result returns to this agent
+// agent. The runtime owns orchestration: every step result returns to this agent
 // before the next module is called.
 type PlanAndExecuteAgent struct {
 	provider      llm.Provider
@@ -33,7 +32,7 @@ type PlanAndExecuteAgent struct {
 // PlanAndExecuteOption configures optional PlanAndExecuteAgent settings.
 type PlanAndExecuteOption func(*PlanAndExecuteAgent)
 
-// NewPlanAndExecuteAgent constructs a single-agent plan-and-execute loop.
+// NewPlanAndExecuteAgent constructs a single-agent plan-and-execute agent.
 func NewPlanAndExecuteAgent(provider llm.Provider, opts ...PlanAndExecuteOption) *PlanAndExecuteAgent {
 	agent := &PlanAndExecuteAgent{
 		provider:      provider,
@@ -80,8 +79,8 @@ func WithPlanToolTimeout(timeout time.Duration) PlanAndExecuteOption {
 
 // Run appends the user prompt, creates a plan, executes planned steps, then
 // synthesizes the final assistant answer.
-func (a *PlanAndExecuteAgent) Run(ctx context.Context, session *session.State, userPrompt string) <-chan agent.Event {
+func (a *PlanAndExecuteAgent) Run(ctx context.Context, input agent.RunInput) <-chan agent.Event {
 	events := make(chan agent.Event)
-	go a.run(ctx, events, session, userPrompt)
+	go a.run(ctx, events, input)
 	return events
 }

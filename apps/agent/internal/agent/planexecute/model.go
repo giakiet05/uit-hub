@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/loop"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
@@ -20,7 +19,7 @@ func (a *PlanAndExecuteAgent) callModel(
 	tools []tool.Definition,
 	stats *agent.RunStats,
 ) (llm.GenerateResponse, error) {
-	if !loop.Emit(ctx, events, agent.ModelCallStartedEvent{SessionID: sessionID, Round: round}) {
+	if !agent.Emit(ctx, events, agent.ModelCallStartedEvent{SessionID: sessionID, Round: round}) {
 		return llm.GenerateResponse{}, ctx.Err()
 	}
 	startedAt := time.Now()
@@ -36,13 +35,13 @@ func (a *PlanAndExecuteAgent) callModel(
 	}
 	stats.TokenUsage.Add(response.Usage)
 
-	toolCalls := loop.AssistantToolCalls(response.Message)
-	if !loop.Emit(ctx, events, agent.ModelCallCompletedEvent{
+	toolCalls := agent.AssistantToolCalls(response.Message)
+	if !agent.Emit(ctx, events, agent.ModelCallCompletedEvent{
 		SessionID:     sessionID,
 		Round:         round,
 		Usage:         response.Usage,
 		Duration:      duration,
-		ToolCallNames: loop.ToolCallNames(toolCalls),
+		ToolCallNames: agent.ToolCallNames(toolCalls),
 		MessageText:   conversation.Text(response.Message),
 	}) {
 		return llm.GenerateResponse{}, ctx.Err()

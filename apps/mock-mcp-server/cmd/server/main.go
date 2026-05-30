@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -284,83 +285,112 @@ func main() {
 	}, nil)
 
 	data := newStore()
-	registerTools(server, data)
+
+	delayStr := os.Getenv("MOCK_UIT_DELAY")
+	var delay time.Duration
+	if delayStr != "" {
+		if d, err := time.ParseDuration(delayStr); err == nil {
+			delay = d
+		} else {
+			log.Printf("invalid MOCK_UIT_DELAY %q: %v", delayStr, err)
+		}
+	}
+
+	registerTools(server, data, delay)
 
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Printf("mock mcp server failed: %v", err)
 	}
 }
 
-func registerTools(server *mcp.Server, data *store) {
+func withDelay[T any, U any](
+	delay time.Duration,
+	handler func(context.Context, *mcp.CallToolRequest, T) (*mcp.CallToolResult, U, error),
+) func(context.Context, *mcp.CallToolRequest, T) (*mcp.CallToolResult, U, error) {
+	if delay <= 0 {
+		return handler
+	}
+	return func(ctx context.Context, req *mcp.CallToolRequest, input T) (*mcp.CallToolResult, U, error) {
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			var empty U
+			return nil, empty, ctx.Err()
+		}
+		return handler(ctx, req, input)
+	}
+}
+
+func registerTools(server *mcp.Server, data *store, delay time.Duration) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_student_profile",
 		Description: "Read a mock student profile by student ID.",
-	}, data.getStudentProfile)
+	}, withDelay(delay, data.getStudentProfile))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_courses",
 		Description: "Read mock course catalog entries using query text and tags.",
-	}, data.searchCourses)
+	}, withDelay(delay, data.searchCourses))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_student_schedule",
 		Description: "Read a mock student schedule for the current or requested term.",
-	}, data.getStudentSchedule)
+	}, withDelay(delay, data.getStudentSchedule))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_course_detail",
 		Description: "Read detailed mock course information by course code.",
-	}, data.getCourseDetail)
+	}, withDelay(delay, data.getCourseDetail))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_tuition_status",
 		Description: "Read mock tuition status for a student.",
-	}, data.getTuitionStatus)
+	}, withDelay(delay, data.getTuitionStatus))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "upsert_student_note",
 		Description: "Create or update an advisor note for a student. This is a write operation.",
-	}, data.upsertStudentNote)
+	}, withDelay(delay, data.upsertStudentNote))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_student_notes",
 		Description: "Read advisor notes for a student.",
-	}, data.listStudentNotes)
+	}, withDelay(delay, data.listStudentNotes))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "delete_student_note",
 		Description: "Delete an advisor note by note ID. This is a write operation.",
-	}, data.deleteStudentNote)
+	}, withDelay(delay, data.deleteStudentNote))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "submit_leave_request",
 		Description: "Create a mock leave request for a student. This is a write operation with nested object and array input.",
-	}, data.submitLeaveRequest)
+	}, withDelay(delay, data.submitLeaveRequest))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "create_study_plan",
 		Description: "Create a mock study plan for a student. This is a write operation.",
-	}, data.createStudyPlan)
+	}, withDelay(delay, data.createStudyPlan))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "patch_study_plan",
 		Description: "Patch a mock study plan by ID. This is a write operation.",
-	}, data.patchStudyPlan)
+	}, withDelay(delay, data.patchStudyPlan))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "create_advisor_ticket",
 		Description: "Create a mock advisor ticket for a student. This is a write operation.",
-	}, data.createAdvisorTicket)
+	}, withDelay(delay, data.createAdvisorTicket))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "patch_advisor_ticket",
 		Description: "Patch a mock advisor ticket by ID. This is a write operation.",
-	}, data.patchAdvisorTicket)
+	}, withDelay(delay, data.patchAdvisorTicket))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "submit_support_request",
 		Description: "Submit a mock student support request. This is a write operation.",
-	}, data.submitSupportRequest)
+	}, withDelay(delay, data.submitSupportRequest))
 }
 
 func newStore() *store {

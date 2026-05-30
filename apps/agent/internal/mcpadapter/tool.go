@@ -10,6 +10,7 @@ import (
 
 // Tool adapts one MCP server tool to the agent's native tool interface.
 type Tool struct {
+	tool.BaseTool
 	serverName string
 	session    Session
 	mcpTool    *mcp.Tool
@@ -18,18 +19,22 @@ type Tool struct {
 // NewTool creates a native wrapper for one MCP tool.
 func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
 	return &Tool{
+		BaseTool: tool.NewBaseTool(
+			tool.Definition{
+				Name:        NamespacedName(serverName, mcpTool.Name),
+				Description: mcpTool.Description,
+				InputSchema: InputSchemaFromMCP(mcpTool.InputSchema),
+			},
+			tool.Metadata{
+				ReadOnly:        false,
+				Destructive:     false,
+				ConcurrencySafe: true,
+				MaxResultChars:  tool.DefaultMaxResultChars,
+			},
+		),
 		serverName: serverName,
 		session:    session,
 		mcpTool:    mcpTool,
-	}
-}
-
-// Definition returns the native tool definition passed to LLM providers.
-func (t *Tool) Definition() tool.Definition {
-	return tool.Definition{
-		Name:        NamespacedName(t.serverName, t.mcpTool.Name),
-		Description: t.mcpTool.Description,
-		InputSchema: InputSchemaFromMCP(t.mcpTool.InputSchema),
 	}
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
 
 const (
@@ -25,8 +26,7 @@ const (
 
 type model struct {
 	ctx              context.Context
-	session          *session.State
-	agent            agent.Agent
+	session          *session.Session
 	logs             *LogBuffer
 	width            int
 	height           int
@@ -38,6 +38,8 @@ type model struct {
 	mouseEnabled     bool
 	conversation     []conversationItem
 	conversationView viewport.Model
+	lastRunUsage     usage.TokenUsage
+	sessionUsage     usage.TokenUsage
 	logLines         []string
 	logView          viewport.Model
 	err              error
@@ -84,7 +86,7 @@ type logRefreshMsg struct {
 }
 
 // newModel creates the Bubble Tea model and initializes viewports and input.
-func newModel(ctx context.Context, session *session.State, runtimeAgent agent.Agent, logs *LogBuffer, initialPrompt string) model {
+func newModel(ctx context.Context, session *session.Session, logs *LogBuffer, initialPrompt string) model {
 	initialPrompt = strings.TrimSpace(initialPrompt)
 	conversationView := viewport.New(1, 1)
 	conversationView.MouseWheelDelta = mouseScrollLines
@@ -103,7 +105,6 @@ func newModel(ctx context.Context, session *session.State, runtimeAgent agent.Ag
 	return model{
 		ctx:              ctx,
 		session:          session,
-		agent:            runtimeAgent,
 		logs:             logs,
 		input:            input,
 		streamingIndex:   -1,
@@ -248,7 +249,7 @@ func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 		text: prompt,
 	})
 	m.syncConversation(true)
-	return m, runAgent(m.ctx, m.agent, m.session, prompt)
+	return m, runAgent(m.ctx, m.session, prompt)
 }
 
 // handleAgentEvent applies a streamed agent event to the TUI state.
@@ -308,6 +309,7 @@ func (m model) handleAgentEvent(event agent.Event) model {
 		m.status = ""
 		m.streamingIndex = -1
 		m.err = typed.Err
+		m.updateUsageStats(typed.Stats.TokenUsage)
 		m.conversation = append(m.conversation, conversationItem{
 			role: conversationRoleAssistant,
 			text: "agent error: " + typed.Err.Error(),
@@ -317,9 +319,15 @@ func (m model) handleAgentEvent(event agent.Event) model {
 		m.status = ""
 		m.streamingIndex = -1
 		m.err = nil
+		m.updateUsageStats(typed.Stats.TokenUsage)
 		m.appendActivity(activityKindDone, "completed: "+string(typed.Reason))
 	}
 	return m
+}
+
+func (m *model) updateUsageStats(lastRun usage.TokenUsage) {
+	m.lastRunUsage = lastRun
+	m.sessionUsage.Add(lastRun)
 }
 
 func (m *model) appendActivity(kind activityKind, text string) {
@@ -435,6 +443,7 @@ func (m model) View() string {
 	}
 
 	conversationPane := m.conversationView.View()
+	conversationPane = lipgloss.JoinVertical(lipgloss.Left, conversationPane, m.renderUsageLine())
 	logPane := m.logView.View()
 	main := lipgloss.JoinHorizontal(lipgloss.Top, conversationPane, logPane)
 
@@ -493,11 +502,29 @@ func (m *model) resizeViewports() {
 	}
 	m.input.Width = inputWidth
 	m.conversationView.Width = leftWidth
-	m.conversationView.Height = mainHeight
+	m.conversationView.Height = mainHeight - 1
+	if m.conversationView.Height < 1 {
+		m.conversationView.Height = 1
+	}
 	m.logView.Width = rightWidth
 	m.logView.Height = mainHeight
 	m.syncConversation(false)
 	m.syncLogs(false)
+}
+
+func (m model) renderUsageLine() string {
+	content := fmt.Sprintf(
+		"last i/o %d/%d | session i/o %d/%d",
+		m.lastRunUsage.InputTokens,
+		m.lastRunUsage.OutputTokens,
+		m.sessionUsage.InputTokens,
+		m.sessionUsage.OutputTokens,
+	)
+	width := m.conversationView.Width - usageLineStyle.GetHorizontalFrameSize()
+	if width < 1 {
+		width = 1
+	}
+	return usageLineStyle.Width(width).Render(content)
 }
 
 // syncConversation refreshes the conversation viewport content.
@@ -639,8 +666,8 @@ func logValueStyle(key string, value string) lipgloss.Style {
 }
 
 // runAgent starts an agent event stream as a Bubble Tea command.
-func runAgent(ctx context.Context, runtimeAgent agent.Agent, session *session.State, prompt string) tea.Cmd {
-	stream := runtimeAgent.Run(ctx, session, prompt)
+func runAgent(ctx context.Context, session *session.Session, prompt string) tea.Cmd {
+	stream := session.Run(ctx, prompt)
 	return waitAgentEvent(stream)
 }
 
@@ -688,6 +715,10 @@ var userMessageStyle = lipgloss.NewStyle().
 
 var assistantMessageStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("250"))
+
+var usageLineStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("244")).
+	Padding(0, 1)
 
 func activityMessageStyle(kind activityKind) lipgloss.Style {
 	switch kind {

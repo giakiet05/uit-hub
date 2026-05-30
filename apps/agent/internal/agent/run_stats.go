@@ -3,7 +3,6 @@ package agent
 import (
 	"time"
 
-	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
 
@@ -37,17 +36,4 @@ func (s RunStats) Duration() time.Duration {
 		return time.Since(s.StartedAt)
 	}
 	return s.FinishedAt.Sub(s.StartedAt)
-}
-
-// UsageDeltaFromRunStats converts one run's stats into a session usage delta.
-func UsageDeltaFromRunStats(stats *RunStats) session.UsageDelta {
-	if stats == nil {
-		return session.UsageDelta{}
-	}
-	return session.UsageDelta{
-		TokenUsage:   stats.TokenUsage,
-		LLMCalls:     stats.LLMCalls,
-		ToolCalls:    stats.ToolCalls,
-		ToolFailures: stats.ToolFailures,
-	}
 }

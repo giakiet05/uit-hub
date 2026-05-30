@@ -12,27 +12,29 @@ import (
 
 // WriteFile writes files under a configured sandbox root.
 type WriteFile struct {
+	tool.BaseTool
 	rootDir string
 }
 
 // NewWriteFile creates a sandboxed file-writing tool.
 func NewWriteFile(rootDir string) *WriteFile {
-	return &WriteFile{rootDir: rootDir}
-}
-
-// Definition describes the sandboxed file-writing tool schema.
-func (t *WriteFile) Definition() tool.Definition {
-	return tool.Definition{
-		Name:        "write_file",
-		Description: "Write text content to a file inside the agent file sandbox.",
-		InputSchema: tool.ObjectSchema(
-			map[string]any{
-				"path":    tool.StringProperty("Relative file path inside the sandbox, for example notes/result.txt."),
-				"content": tool.StringProperty("Text content to write."),
+	return &WriteFile{
+		BaseTool: tool.NewBaseTool(
+			tool.Definition{
+				Name:        "write_file",
+				Description: "Write text content to a file inside the agent file sandbox.",
+				InputSchema: tool.ObjectSchema(
+					map[string]any{
+						"path":    tool.StringProperty("Relative file path inside the sandbox, for example notes/result.txt."),
+						"content": tool.StringProperty("Text content to write."),
+					},
+					"path",
+					"content",
+				),
 			},
-			"path",
-			"content",
+			tool.NewWriteMetadata(false, tool.DefaultMaxResultChars),
 		),
+		rootDir: rootDir,
 	}
 }
 

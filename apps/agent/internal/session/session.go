@@ -2,7 +2,6 @@
 package session
 
 import (
-	"context"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -21,23 +20,16 @@ type State struct {
 	ID             string
 	StartedAt      time.Time
 	Conversation   conversation.Conversation
-	PromptSnapshot prompt.SessionPrompt
-	Tools          *tool.ToolSet
-	Usage          Usage
+	PromptSnapshot  prompt.SessionPrompt
+	Tools           *tool.ToolSet
+	Usage           Usage
+	ConcurrentTools bool
 }
 
 // Usage records aggregate counters for one session.
 type Usage struct {
 	usage.TokenUsage
 	Runs         int
-	LLMCalls     int
-	ToolCalls    int
-	ToolFailures int
-}
-
-// UsageDelta records one run's contribution to session usage.
-type UsageDelta struct {
-	usage.TokenUsage
 	LLMCalls     int
 	ToolCalls    int
 	ToolFailures int
@@ -57,6 +49,13 @@ func WithPromptSnapshot(promptSnapshot prompt.SessionPrompt) Option {
 func WithTools(tools *tool.ToolSet) Option {
 	return func(s *State) {
 		s.Tools = tools
+	}
+}
+
+// WithConcurrentTools sets the concurrent tools flag.
+func WithConcurrentTools(concurrent bool) Option {
+	return func(s *State) {
+		s.ConcurrentTools = concurrent
 	}
 }
 
@@ -107,32 +106,4 @@ func (s *State) ToolDefinition(name string) (tool.Definition, bool) {
 		return tool.Definition{}, false
 	}
 	return s.Tools.Definition(name)
-}
-
-// ExecuteTool runs a visible tool in this session.
-func (s *State) ExecuteTool(ctx context.Context, call tool.Call) (tool.Result, error) {
-	if s == nil || s.Tools == nil {
-		return tool.Result{}, tool.ErrNotFound
-	}
-	return s.Tools.Execute(ctx, call)
-}
-
-// MarkToolUsed records usage of a session runtime tool for LRU eviction.
-func (s *State) MarkToolUsed(name string) {
-	if s == nil || s.Tools == nil {
-		return
-	}
-	s.Tools.MarkUsed(name)
-}
-
-// AddUsage merges one run's usage into the session aggregate.
-func (s *State) AddUsage(delta UsageDelta) {
-	if s == nil {
-		return
-	}
-	s.Usage.Runs++
-	s.Usage.LLMCalls += delta.LLMCalls
-	s.Usage.ToolCalls += delta.ToolCalls
-	s.Usage.ToolFailures += delta.ToolFailures
-	s.Usage.TokenUsage.Add(delta.TokenUsage)
 }
