@@ -2,6 +2,7 @@ package mcpadapter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
@@ -18,6 +19,22 @@ type Tool struct {
 
 // NewTool creates a native wrapper for one MCP tool.
 func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
+	concurrencySafe := false
+
+	if mcpTool.InputSchema != nil {
+		data, err := json.Marshal(mcpTool.InputSchema)
+		if err == nil {
+			var m map[string]any
+			if json.Unmarshal(data, &m) == nil {
+				if val, ok := m["_concurrencySafe"].(bool); ok && val {
+					concurrencySafe = true
+				}
+				delete(m, "_concurrencySafe")
+				mcpTool.InputSchema = m
+			}
+		}
+	}
+
 	return &Tool{
 		BaseTool: tool.NewBaseTool(
 			tool.Definition{
@@ -28,7 +45,7 @@ func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
 			tool.Metadata{
 				ReadOnly:        false,
 				Destructive:     false,
-				ConcurrencySafe: true,
+				ConcurrencySafe: concurrencySafe,
 				MaxResultChars:  tool.DefaultMaxResultChars,
 			},
 		),

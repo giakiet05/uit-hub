@@ -80,6 +80,10 @@ func run(ctx context.Context, args []string, stderr *os.File) error {
 			return fmt.Errorf("load case %q: %w", path, err)
 		}
 
+		// Clean up the hardcoded agent workspace to prevent state leakage between cases.
+		os.RemoveAll("tmp/agent-files")
+		os.MkdirAll("tmp/agent-files", 0755)
+
 		caseCtx, cancel := context.WithTimeout(ctx, timeout)
 		result, reportDir, err := runner.RunCase(caseCtx, testCase, outputDir)
 		cancel()

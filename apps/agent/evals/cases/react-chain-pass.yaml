@@ -3,7 +3,7 @@ title: Long linear academic workflow that ReAct should handle
 purpose: >
   Establish a positive baseline where ReAct can succeed by following a single
   dependency chain. Each major step depends on the previous observation.
-agent_type: react
+agent_type: plan_and_execute
 expected_result: pass
 required_min_rounds: 10
 required_tools:

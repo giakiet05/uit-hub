@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -321,30 +323,44 @@ func withDelay[T any, U any](
 	}
 }
 
+func safeSchema[In any]() *jsonschema.Schema {
+	schema, err := jsonschema.ForType(reflect.TypeFor[In](), nil)
+	if err != nil {
+		panic(err)
+	}
+	schema.Extra = map[string]any{"_concurrencySafe": true}
+	return schema
+}
+
 func registerTools(server *mcp.Server, data *store, delay time.Duration) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_student_profile",
 		Description: "Read a mock student profile by student ID.",
+		InputSchema: safeSchema[getStudentProfileInput](),
 	}, withDelay(delay, data.getStudentProfile))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_courses",
 		Description: "Read mock course catalog entries using query text and tags.",
+		InputSchema: safeSchema[searchCoursesInput](),
 	}, withDelay(delay, data.searchCourses))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_student_schedule",
 		Description: "Read a mock student schedule for the current or requested term.",
+		InputSchema: safeSchema[getStudentScheduleInput](),
 	}, withDelay(delay, data.getStudentSchedule))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_course_detail",
 		Description: "Read detailed mock course information by course code.",
+		InputSchema: safeSchema[getCourseDetailInput](),
 	}, withDelay(delay, data.getCourseDetail))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_tuition_status",
 		Description: "Read mock tuition status for a student.",
+		InputSchema: safeSchema[getTuitionStatusInput](),
 	}, withDelay(delay, data.getTuitionStatus))
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -355,6 +371,7 @@ func registerTools(server *mcp.Server, data *store, delay time.Duration) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_student_notes",
 		Description: "Read advisor notes for a student.",
+		InputSchema: safeSchema[listStudentNotesInput](),
 	}, withDelay(delay, data.listStudentNotes))
 
 	mcp.AddTool(server, &mcp.Tool{

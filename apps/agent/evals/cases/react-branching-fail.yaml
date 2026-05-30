@@ -3,7 +3,7 @@ title: Branching academic workflow expected to expose ReAct weakness
 purpose: >
   Establish a negative baseline where ReAct is expected to struggle because the
   task has multiple branches, partial dependencies, and a final merge.
-agent_type: react
+agent_type: plan_and_execute
 expected_result: fail_or_partial
 required_min_rounds: 10
 required_tools:

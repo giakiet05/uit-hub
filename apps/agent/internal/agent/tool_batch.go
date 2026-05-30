@@ -40,14 +40,24 @@ func RunToolBatch(
 	executor := tool.NewExecutor(input.Tools, timeout)
 	var finalResults []tool.Result
 
-	for _, b := range batches {
+	for i, b := range batches {
 		if b.parallel && input.ConcurrentTools {
+			if len(b.calls) > 1 {
+				logger.DebugContext(ctx, "Executing tool batch concurrently", "batch_index", i, "tool_count", len(b.calls))
+			} else {
+				logger.DebugContext(ctx, "Executing single safe tool", "batch_index", i, "tool_name", b.calls[0].Name)
+			}
 			batchResults, ok := runParallelBatch(ctx, logger, agentType, events, input, round, b.calls, timeout, stats, executor)
 			if !ok {
 				return nil, false
 			}
 			finalResults = append(finalResults, batchResults...)
 		} else {
+			if len(b.calls) == 1 {
+				logger.DebugContext(ctx, "Executing single unsafe tool", "batch_index", i, "tool_name", b.calls[0].Name)
+			} else {
+				logger.DebugContext(ctx, "Executing tool batch serially", "batch_index", i, "tool_count", len(b.calls), "safe", b.parallel)
+			}
 			batchResults, ok := runSerialBatch(ctx, logger, agentType, events, input, round, b.calls, timeout, stats, executor)
 			if !ok {
 				return nil, false
