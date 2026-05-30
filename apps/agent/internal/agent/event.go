@@ -120,6 +120,14 @@ type ToolCallStartedEvent struct {
 	Timeout   time.Duration
 }
 
+// ToolPermissionRequestEvent is emitted when a tool requires user approval before execution.
+type ToolPermissionRequestEvent struct {
+	SessionID string
+	Round     int
+	Call      conversation.ToolCall
+	Response  chan bool
+}
+
 // ToolCallCompletedEvent is emitted after a tool call succeeds.
 type ToolCallCompletedEvent struct {
 	SessionID string
@@ -173,6 +181,7 @@ func (ReplanStartedEvent) isAgentEvent()      {}
 func (PlanUpdatedEvent) isAgentEvent()        {}
 func (FinalizingEvent) isAgentEvent()         {}
 func (ToolCallStartedEvent) isAgentEvent()    {}
+func (ToolPermissionRequestEvent) isAgentEvent() {}
 func (ToolCallCompletedEvent) isAgentEvent()  {}
 func (ToolCallFailedEvent) isAgentEvent()     {}
 func (FinalAnswerEvent) isAgentEvent()        {}

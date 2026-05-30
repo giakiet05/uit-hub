@@ -181,6 +181,45 @@ func executeOneTool(
 	timeout time.Duration,
 	executor *tool.Executor,
 ) (tool.Result, bool, bool) {
+	metadata, hasMetadata := executor.Metadata(call.Name)
+	if hasMetadata && metadata.RequireApproval {
+		responseChan := make(chan bool, 1)
+		if !Emit(ctx, events, ToolPermissionRequestEvent{
+			SessionID: input.SessionID,
+			Round:     round,
+			Call:      call,
+			Response:  responseChan,
+		}) {
+			return tool.Result{}, false, false
+		}
+
+		var approved bool
+		select {
+		case <-ctx.Done():
+			return tool.Result{}, false, false
+		case approved = <-responseChan:
+		}
+
+		if !approved {
+			observation := "User rejected this tool execution."
+			result := tool.Result{
+				CallID:  call.ID,
+				Name:    call.Name,
+				Content: observation,
+			}
+			if !Emit(ctx, events, ToolCallFailedEvent{
+				SessionID:   input.SessionID,
+				Round:       round,
+				Call:        call,
+				Observation: observation,
+				Duration:    0,
+			}) {
+				return tool.Result{}, true, false
+			}
+			return result, true, true
+		}
+	}
+
 	if !Emit(ctx, events, ToolCallStartedEvent{
 		SessionID: input.SessionID,
 		Round:     round,

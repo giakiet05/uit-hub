@@ -37,6 +37,7 @@ type Metadata struct {
 	ReadOnly        bool
 	Destructive     bool
 	ConcurrencySafe bool
+	RequireApproval bool
 	MaxResultChars  int
 }
 
@@ -51,11 +52,12 @@ func NewReadOnlyMetadata(concurrencySafe bool, maxResultChars int) Metadata {
 }
 
 // NewWriteMetadata creates metadata for tools that can mutate state.
-func NewWriteMetadata(destructive bool, maxResultChars int) Metadata {
+func NewWriteMetadata(destructive bool, requireApproval bool, maxResultChars int) Metadata {
 	return Metadata{
-		ReadOnly:       false,
-		Destructive:    destructive,
-		MaxResultChars: maxResultChars,
+		ReadOnly:        false,
+		Destructive:     destructive,
+		RequireApproval: requireApproval,
+		MaxResultChars:  maxResultChars,
 	}
 }
 

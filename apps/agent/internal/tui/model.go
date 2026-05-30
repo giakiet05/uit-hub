@@ -43,6 +43,7 @@ type model struct {
 	logLines         []string
 	logView          viewport.Model
 	err              error
+	pendingPermission *agent.ToolPermissionRequestEvent
 }
 
 type conversationRole string
@@ -163,6 +164,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateKey handles keyboard shortcuts and prompt editing.
 func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.pendingPermission != nil {
+		switch msg.String() {
+		case "ctrl+c":
+			m.pendingPermission.Response <- false
+			m.pendingPermission = nil
+			m.resizeViewports()
+			return m, tea.Quit
+		case "y", "Y":
+			m.pendingPermission.Response <- true
+			m.pendingPermission = nil
+			m.resizeViewports()
+			return m, nil
+		case "n", "N", "esc":
+			m.pendingPermission.Response <- false
+			m.pendingPermission = nil
+			m.resizeViewports()
+			return m, nil
+		default:
+			// ignore other keys while pending permission
+			return m, nil
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "esc":
 		return m, tea.Quit
@@ -301,6 +325,13 @@ func (m model) handleAgentEvent(event agent.Event) model {
 	case agent.ToolCallFailedEvent:
 		m.status = "tool failed " + typed.Call.Name
 		m.appendActivity(activityKindError, "tool failed "+typed.Call.Name+": "+typed.Observation)
+	case agent.ToolPermissionRequestEvent:
+		m.status = "waiting for permission: " + typed.Call.Name
+		// We make a copy because the event value is passed by value in typed
+		eventCopy := typed
+		m.pendingPermission = &eventCopy
+		m.appendActivity(activityKindTool, "requesting permission for tool "+typed.Call.Name)
+		m.resizeViewports()
 	case agent.FinalAnswerEvent:
 		m.status = "answer"
 		m.setFinalAnswer(conversation.Text(typed.Message))
@@ -447,7 +478,26 @@ func (m model) View() string {
 	logPane := m.logView.View()
 	main := lipgloss.JoinHorizontal(lipgloss.Top, conversationPane, logPane)
 
-	return lipgloss.JoinVertical(lipgloss.Left, main, m.renderInput())
+	view := main
+	if m.pendingPermission != nil {
+		title := "⚠️ Tool Permission Request: " + m.pendingPermission.Call.Name
+		desc := previewToolArguments(m.pendingPermission.Call.Arguments)
+		prompt := "Allow execution? (y/N/Esc)"
+
+		banner := lipgloss.NewStyle().
+			Background(lipgloss.Color("203")).
+			Foreground(lipgloss.Color("232")).
+			Bold(true).
+			Padding(0, 1).
+			Width(m.width).
+			Height(2).
+			MaxHeight(2).
+			Render(fmt.Sprintf("%s\n%s | %s", title, desc, prompt))
+
+		view = lipgloss.JoinVertical(lipgloss.Left, view, banner)
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, view, m.renderInput())
 }
 
 // renderInput renders the bottom prompt box and transient status text.
@@ -484,6 +534,9 @@ func (m model) agentStatus() string {
 // mainHeight returns the height available to the conversation and log panes.
 func (m model) mainHeight() int {
 	mainHeight := m.height - inputHeight
+	if m.pendingPermission != nil {
+		mainHeight -= 2 // height of the banner
+	}
 	if mainHeight < 1 {
 		return 1
 	}

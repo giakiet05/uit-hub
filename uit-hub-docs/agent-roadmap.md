@@ -19,47 +19,23 @@ Cần lưu ý khác biệt domain:
 
 Vì vậy, các abstraction của Claude Code sẽ được điều chỉnh theo domain UIT thay vì copy nguyên xi.
 
-## Roadmap lớn
+## Roadmap lớn (Cập nhật)
 
-1. Core CLI và bootstrap
-   - Tạo CLI mỏng để nhận prompt, đọc config cần thiết, chọn provider/model và khởi chạy agent.
-   - Chưa cần TUI phức tạp, chưa cần backend web.
+1. Core CLI và bootstrap (Đã xong)
+2. Agent loop (ReAct & Plan-and-Execute) (Đã xong)
+3. Tool system MVP (Đã xong)
+4. Nâng cấp tool: Concurrency, JSON Schema metadata (Đã xong)
 
-2. Agent loop
-   - Xây vòng lặp chính gồm message history, gọi model, nhận response, phát hiện tool call, append tool result và lặp đến khi hoàn thành.
-   - Đây là lõi sống còn của toàn bộ agent.
+**CÁC TÍNH NĂNG TIẾP THEO (Theo thứ tự ưu tiên mới):**
 
-3. Tool system MVP
-   - Định nghĩa tool interface tự mô tả: name, description, schema/input và execute.
-   - Ban đầu chỉ cần vài tool gọi fake UIT server hoặc mock data.
-   - Đến mốc này phải có single-agent MVP dùng được.
-
-4. State và session
-   - Tách runtime/session state khỏi conversation state.
-   - Lưu message history tối thiểu, mode chạy, context sinh viên và thông tin token/cost nếu có.
-
-5. Memory
-   - Thêm memory sau khi agent loop và tool system đã ổn.
-   - Memory có thể gồm user profile, thông tin học tập đã biết, sở thích, và các nội dung quan trọng từ lịch sử hội thoại.
-
-6. Nâng cấp tool
-   - Thêm timeout, retry, structured errors, policy/permission nhẹ, result rendering và concurrency khi cần.
-   - Với domain UIT, ưu tiên độ tin cậy API và tính đúng của dữ liệu hơn là shell safety.
-
-7. Multi-agent và task orchestration
-   - Khi single agent bắt đầu phình, tách thành các sub-agent/task như academic advisor, schedule agent, course lookup agent, policy/FAQ agent.
-   - Sub-agent nên dùng cùng core loop, không tạo code path riêng.
-
-8. Hooks và extensibility
-   - Thêm hook trước/sau tool call, trước/sau model call, logging, guardrail và context injection.
-   - Đây là nền tảng hữu ích khi chuyển sang backend service.
-
-9. Backend web mode
-   - Khi CLI core đã ổn, bọc agent thành service API.
-   - Thêm session endpoint, streaming response, user auth, persistence và observability.
-
-10. Production hardening
-    - Tối ưu performance, token budget, caching, eval/test scenarios, monitoring, rate limit và failure recovery.
+5. **Human in the loop (Đã xong):** Cho phép agent tạm dừng để hỏi xin ý kiến hoặc chờ user duyệt một tool nguy hiểm.
+6. **Compact conversation:** Thu gọn/nén lịch sử chat (tóm tắt các vòng lặp cũ) để tiết kiệm token khi context phình to.
+7. **Persistent conversation:** Lưu lịch sử chat vào Database thay vì chỉ giữ trong RAM, cho phép user tiếp tục session cũ.
+8. **Skills and hooks:** Thêm hook can thiệp trước/sau khi gọi tool, gọi model (phục vụ logging, guardrails).
+9. **Cancel context / Interrupt signal:** Xử lý bắt tín hiệu Ctrl+C từ người dùng để ngắt luồng an toàn (cancel context, abort goroutines).
+10. **Multi-agent:** Kiến trúc đa agent chuyên biệt phối hợp làm việc (Để làm CUỐI CÙNG).
+11. **Backend web mode:** Bọc agent thành service API.
+12. **Production hardening:** Tối ưu performance, caching, eval, rate limit.
 
 ## Chiến lược đọc tài liệu Claude Code
 

@@ -25,6 +25,18 @@ func NewExecutor(tools *ToolSet, timeout time.Duration) *Executor {
 	}
 }
 
+// Metadata returns the metadata for a tool by name, if it exists.
+func (e *Executor) Metadata(name string) (Metadata, bool) {
+	if e == nil || e.tools == nil {
+		return Metadata{}, false
+	}
+	selected, exists := e.tools.Tool(name)
+	if !exists {
+		return Metadata{}, false
+	}
+	return selected.Metadata(), true
+}
+
 // Execute runs one tool call through the pipeline.
 func (e *Executor) Execute(ctx context.Context, call Call) (Result, error) {
 	if result, ok := e.duplicateMCPToolLoadResult(call); ok {

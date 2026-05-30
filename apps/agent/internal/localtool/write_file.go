@@ -32,7 +32,7 @@ func NewWriteFile(rootDir string) *WriteFile {
 					"content",
 				),
 			},
-			tool.NewWriteMetadata(false, tool.DefaultMaxResultChars),
+			tool.NewWriteMetadata(false, true, tool.DefaultMaxResultChars),
 		),
 		rootDir: rootDir,
 	}

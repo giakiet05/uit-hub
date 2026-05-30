@@ -332,6 +332,15 @@ func safeSchema[In any]() *jsonschema.Schema {
 	return schema
 }
 
+func writeSchema[In any]() *jsonschema.Schema {
+	schema, err := jsonschema.ForType(reflect.TypeFor[In](), nil)
+	if err != nil {
+		panic(err)
+	}
+	schema.Extra = map[string]any{"_requireApproval": true}
+	return schema
+}
+
 func registerTools(server *mcp.Server, data *store, delay time.Duration) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_student_profile",
@@ -366,6 +375,7 @@ func registerTools(server *mcp.Server, data *store, delay time.Duration) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "upsert_student_note",
 		Description: "Create or update an advisor note for a student. This is a write operation.",
+		InputSchema: writeSchema[upsertStudentNoteInput](),
 	}, withDelay(delay, data.upsertStudentNote))
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -377,36 +387,43 @@ func registerTools(server *mcp.Server, data *store, delay time.Duration) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "delete_student_note",
 		Description: "Delete an advisor note by note ID. This is a write operation.",
+		InputSchema: writeSchema[deleteStudentNoteInput](),
 	}, withDelay(delay, data.deleteStudentNote))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "submit_leave_request",
 		Description: "Create a mock leave request for a student. This is a write operation with nested object and array input.",
+		InputSchema: writeSchema[submitLeaveRequestInput](),
 	}, withDelay(delay, data.submitLeaveRequest))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "create_study_plan",
 		Description: "Create a mock study plan for a student. This is a write operation.",
+		InputSchema: writeSchema[createStudyPlanInput](),
 	}, withDelay(delay, data.createStudyPlan))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "patch_study_plan",
 		Description: "Patch a mock study plan by ID. This is a write operation.",
+		InputSchema: writeSchema[patchStudyPlanInput](),
 	}, withDelay(delay, data.patchStudyPlan))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "create_advisor_ticket",
 		Description: "Create a mock advisor ticket for a student. This is a write operation.",
+		InputSchema: writeSchema[createAdvisorTicketInput](),
 	}, withDelay(delay, data.createAdvisorTicket))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "patch_advisor_ticket",
 		Description: "Patch a mock advisor ticket by ID. This is a write operation.",
+		InputSchema: writeSchema[patchAdvisorTicketInput](),
 	}, withDelay(delay, data.patchAdvisorTicket))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "submit_support_request",
 		Description: "Submit a mock student support request. This is a write operation.",
+		InputSchema: writeSchema[submitSupportRequestInput](),
 	}, withDelay(delay, data.submitSupportRequest))
 }
 

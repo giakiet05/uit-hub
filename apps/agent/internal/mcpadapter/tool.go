@@ -20,6 +20,7 @@ type Tool struct {
 // NewTool creates a native wrapper for one MCP tool.
 func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
 	concurrencySafe := false
+	requireApproval := false
 
 	if mcpTool.InputSchema != nil {
 		data, err := json.Marshal(mcpTool.InputSchema)
@@ -30,6 +31,12 @@ func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
 					concurrencySafe = true
 				}
 				delete(m, "_concurrencySafe")
+				
+				if val, ok := m["_requireApproval"].(bool); ok && val {
+					requireApproval = true
+				}
+				delete(m, "_requireApproval")
+				
 				mcpTool.InputSchema = m
 			}
 		}
@@ -46,6 +53,7 @@ func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
 				ReadOnly:        false,
 				Destructive:     false,
 				ConcurrencySafe: concurrencySafe,
+				RequireApproval: requireApproval,
 				MaxResultChars:  tool.DefaultMaxResultChars,
 			},
 		),
