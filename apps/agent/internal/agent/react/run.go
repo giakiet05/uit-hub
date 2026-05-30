@@ -80,11 +80,11 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 		}
 		llmStartedAt := time.Now()
 		stats.LLMCalls++
-		response, textStreamed, err := a.generate(ctx, events, round, llm.GenerateRequest{
+		response, textStreamed, err := agent.GenerateWithStream(ctx, a.provider, llm.GenerateRequest{
 			SessionID: input.SessionID,
 			Messages:  messages,
 			Tools:     tools,
-		})
+		}, events, round)
 		llmDuration := time.Since(llmStartedAt)
 		if err != nil {
 			agent.Trace(a.logger, ctx,

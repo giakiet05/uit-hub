@@ -24,11 +24,11 @@ func (a *PlanAndExecuteAgent) callModel(
 	}
 	startedAt := time.Now()
 	stats.LLMCalls++
-	response, err := a.provider.Generate(ctx, llm.GenerateRequest{
+	response, textStreamed, err := agent.GenerateWithStream(ctx, a.provider, llm.GenerateRequest{
 		SessionID: sessionID,
 		Messages:  messages,
 		Tools:     tools,
-	})
+	}, events, round)
 	duration := time.Since(startedAt)
 	if err != nil {
 		return llm.GenerateResponse{}, err
@@ -43,6 +43,7 @@ func (a *PlanAndExecuteAgent) callModel(
 		Duration:      duration,
 		ToolCallNames: agent.ToolCallNames(toolCalls),
 		MessageText:   conversation.Text(response.Message),
+		TextStreamed:  textStreamed,
 	}) {
 		return llm.GenerateResponse{}, ctx.Err()
 	}
