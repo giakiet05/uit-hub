@@ -6,22 +6,24 @@ import (
 
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/eventbus"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/eventhandler"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/event/handler"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/storage"
 )
 
 // Runtime owns the reusable agent core shared by TUI and eval frontends.
 type Runtime struct {
 	State              *State
 	Session            *session.Session
-	Bus                *eventbus.EventBus
-	UsageEventHandler  *eventhandler.UsageEventHandler
-	LoggerEventHandler *eventhandler.LoggerEventHandler
+	Bus                *bus.EventBus
+	UsageEventHandler   *handler.UsageEventHandler
+	LoggerEventHandler  *handler.LoggerEventHandler
+	StorageEventHandler *handler.StorageEventHandler
 }
 
 // NewRuntime wires provider, memory, tools, prompt, and session state.
-func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Runtime, error) {
+func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, resume bool, resumeID string) (*Runtime, error) {
 	provider, err := newProvider(cfg, logger)
 	if err != nil {
 		return nil, err
@@ -44,7 +46,33 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger) (*R
 		Closers:     closers,
 	}
 
-	sessionState, err := newSessionState(ctx, state)
+	db, err := storage.InitDB("agent.db")
+	if err != nil {
+		logger.ErrorContext(ctx, "Failed to initialize SQLite database", "error", err)
+	}
+
+	var sessionOpts []session.Option
+	if db != nil && resume {
+		var record *storage.SessionRecord
+		var dbErr error
+		if resumeID != "" {
+			record, dbErr = db.GetSession(resumeID)
+		} else {
+			record, dbErr = db.GetLastSession()
+		}
+		if dbErr == nil && record != nil {
+			messages, usage, decErr := record.Decode()
+			if decErr == nil {
+				sessionOpts = append(sessionOpts, session.WithHistory(record.ID, record.StartedAt, messages, usage))
+			} else {
+				logger.ErrorContext(ctx, "Failed to decode session history", "error", decErr)
+			}
+		} else if dbErr != nil {
+			logger.ErrorContext(ctx, "Failed to load session", "error", dbErr)
+		}
+	}
+
+	sessionState, err := newSessionState(ctx, state, sessionOpts...)
 	if err != nil {
 		logger.DebugContext(ctx, "Session initialization failed", "error", err)
 		closeAll(ctx, logger, closers)
@@ -58,13 +86,21 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger) (*R
 		return nil, err
 	}
 
-	bus := eventbus.New(128, logger)
+	bus := bus.New(128, logger)
 	
-	usageSub := eventhandler.NewUsageEventHandler(ctx, sessionState, bus, logger)
+	usageSub := handler.NewUsageEventHandler(ctx, sessionState, bus, logger)
 	usageSub.Start()
 	
-	loggerSub := eventhandler.NewLoggerEventHandler(ctx, bus, logger)
+	loggerSub := handler.NewLoggerEventHandler(ctx, bus, logger)
 	loggerSub.Start()
+
+
+
+	var storageSub *handler.StorageEventHandler
+	if db != nil {
+		storageSub = handler.NewStorageEventHandler(ctx, db, sessionState, bus, logger)
+		storageSub.Start()
+	}
 
 	logger.DebugContext(ctx, "Startup configuration",
 		"provider", cfg.Provider,
@@ -79,9 +115,10 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger) (*R
 	return &Runtime{
 		State:              state,
 		Session:            session.NewSession(sessionState, runtimeAgent, bus),
-		Bus:                bus,
-		UsageEventHandler:  usageSub,
-		LoggerEventHandler: loggerSub,
+		Bus:                 bus,
+		UsageEventHandler:   usageSub,
+		LoggerEventHandler:  loggerSub,
+		StorageEventHandler: storageSub,
 	}, nil
 }
 
@@ -94,6 +131,9 @@ func (r *Runtime) Close(ctx context.Context) {
 	}
 	if r.LoggerEventHandler != nil {
 		r.LoggerEventHandler.Stop()
+	}
+	if r.StorageEventHandler != nil {
+		r.StorageEventHandler.Stop()
 	}
 	if r.Bus != nil {
 		r.Bus.Close()

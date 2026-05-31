@@ -4,19 +4,19 @@ import (
 	"context"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/eventbus"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
 )
 
 // Session owns one chat session and delegates user prompts to an agent service.
 type Session struct {
 	state *State
 	agent agent.Agent
-	bus   *eventbus.EventBus
+	bus   *bus.EventBus
 }
 
 // NewSession creates a session runtime around session state and a stateless
 // agent service.
-func NewSession(state *State, runtimeAgent agent.Agent, bus *eventbus.EventBus) *Session {
+func NewSession(state *State, runtimeAgent agent.Agent, bus *bus.EventBus) *Session {
 	return &Session{
 		state: state,
 		agent: runtimeAgent,
@@ -25,7 +25,7 @@ func NewSession(state *State, runtimeAgent agent.Agent, bus *eventbus.EventBus) 
 }
 
 // Bus returns the EventBus attached to this session.
-func (s *Session) Bus() *eventbus.EventBus {
+func (s *Session) Bus() *bus.EventBus {
 	if s == nil {
 		return nil
 	}

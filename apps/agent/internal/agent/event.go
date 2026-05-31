@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/eventbus"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
@@ -12,7 +12,7 @@ import (
 // Event is the closed set of events emitted by an agent loop.
 type Event interface {
 	isAgentEvent()
-	Topic() eventbus.Topic
+	Topic() bus.Topic
 }
 
 // TerminalReason explains why an agent loop stopped.
@@ -171,58 +171,58 @@ type RunFailedEvent struct {
 }
 
 func (RunStartedEvent) isAgentEvent()         {}
-func (RunStartedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (RunStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (RoundStartedEvent) isAgentEvent()         {}
-func (RoundStartedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (RoundStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (ModelCallStartedEvent) isAgentEvent()         {}
-func (ModelCallStartedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (ModelCallStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (ModelCallCompletedEvent) isAgentEvent()         {}
-func (ModelCallCompletedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (ModelCallCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (ModelTextDeltaEvent) isAgentEvent()         {}
-func (ModelTextDeltaEvent) Topic() eventbus.Topic { return eventbus.TopicStream }
+func (ModelTextDeltaEvent) Topic() bus.Topic { return bus.TopicStream }
 
 func (PlanCreatedEvent) isAgentEvent()         {}
-func (PlanCreatedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (PlanCreatedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (StepStartedEvent) isAgentEvent()         {}
-func (StepStartedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (StepStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (StepCompletedEvent) isAgentEvent()         {}
-func (StepCompletedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (StepCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (StepFailedEvent) isAgentEvent()         {}
-func (StepFailedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (StepFailedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (ReplanStartedEvent) isAgentEvent()         {}
-func (ReplanStartedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (ReplanStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (PlanUpdatedEvent) isAgentEvent()         {}
-func (PlanUpdatedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (PlanUpdatedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (FinalizingEvent) isAgentEvent()         {}
-func (FinalizingEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (FinalizingEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (ToolCallStartedEvent) isAgentEvent()         {}
-func (ToolCallStartedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (ToolCallStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (ToolPermissionRequestEvent) isAgentEvent()         {}
-func (ToolPermissionRequestEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (ToolPermissionRequestEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (ToolCallCompletedEvent) isAgentEvent()         {}
-func (ToolCallCompletedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (ToolCallCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (ToolCallFailedEvent) isAgentEvent()         {}
-func (ToolCallFailedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (ToolCallFailedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (FinalAnswerEvent) isAgentEvent()         {}
-func (FinalAnswerEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (FinalAnswerEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (RunCompletedEvent) isAgentEvent()         {}
-func (RunCompletedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (RunCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (RunFailedEvent) isAgentEvent()         {}
-func (RunFailedEvent) Topic() eventbus.Topic { return eventbus.TopicLifecycle }
+func (RunFailedEvent) Topic() bus.Topic { return bus.TopicLifecycle }

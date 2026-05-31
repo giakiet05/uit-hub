@@ -9,7 +9,7 @@ import (
 
 // newSessionState creates one chat session with stable memory, prompt, and tool
 // snapshots.
-func newSessionState(ctx context.Context, state *State) (*session.State, error) {
+func newSessionState(ctx context.Context, state *State, sessionOpts ...session.Option) (*session.State, error) {
 	memoryContext, err := memory.NewLoader(state.MemoryStore).Load(ctx)
 	if err != nil {
 		state.Logger.DebugContext(ctx, "Memory context load failed", "error", err)
@@ -22,9 +22,10 @@ func newSessionState(ctx context.Context, state *State) (*session.State, error) 
 	}
 
 	promptSnapshot := newSessionPrompt(memoryContext, state.MCPManager.Catalog())
-	return session.NewState(
+	opts := append([]session.Option{
 		session.WithPromptSnapshot(promptSnapshot),
 		session.WithTools(tools),
 		session.WithConcurrentTools(state.Config.Agent.ConcurrentTools),
-	), nil
+	}, sessionOpts...)
+	return session.NewState(opts...), nil
 }

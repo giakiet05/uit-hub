@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/eventbus"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
@@ -44,8 +44,8 @@ type model struct {
 	logView          viewport.Model
 	err              error
 	pendingPermission *agent.ToolPermissionRequestEvent
-	bus              *eventbus.EventBus
-	eventChan        eventbus.EventChan
+	bus              *bus.EventBus
+	eventChan        bus.EventChan
 }
 
 type conversationRole string
@@ -112,12 +112,46 @@ func newModel(ctx context.Context, session *session.Session, logs *LogBuffer, in
 		streamingIndex:   -1,
 		initialRun:       initialPrompt != "",
 		mouseEnabled:     false,
-		conversation:     []conversationItem{},
+		conversation:     buildInitialConversation(session),
 		conversationView: conversationView,
 		logLines:         []string{},
 		logView:          logView,
 		bus:              session.Bus(), // Assume session exposes bus, or we pass it
 	}
+}
+
+func buildInitialConversation(session *session.Session) []conversationItem {
+	var items []conversationItem
+	if session == nil || session.State() == nil {
+		return items
+	}
+
+	messages := session.State().Conversation.Messages()
+	for _, msg := range messages {
+		text := conversation.Text(msg)
+		switch typed := msg.(type) {
+		case conversation.UserMessage:
+			items = append(items, conversationItem{role: conversationRoleUser, text: text})
+		case conversation.AssistantMessage:
+			if text != "" {
+				items = append(items, conversationItem{role: conversationRoleAssistant, text: text})
+			}
+			for _, call := range typed.ToolCalls {
+				items = append(items, conversationItem{
+					role:         conversationRoleActivity,
+					activityKind: activityKindTool,
+					text:         "tool " + call.Name + previewToolArguments(call.Arguments),
+				})
+			}
+		case conversation.ToolResultMessage:
+			items = append(items, conversationItem{
+				role:         conversationRoleActivity,
+				activityKind: activityKindObserve,
+				text:         "tool completed",
+			})
+		}
+	}
+	return items
 }
 
 // Init starts periodic log refresh and the text-input cursor blink.
@@ -720,7 +754,7 @@ func logValueStyle(key string, value string) lipgloss.Style {
 // runAgent starts an agent event stream as a Bubble Tea command.
 func runAgent(ctx context.Context, session *session.Session, prompt string, m *model) tea.Cmd {
 	if m.eventChan == nil && m.bus != nil {
-		m.eventChan = m.bus.Subscribe(eventbus.TopicAll)
+		m.eventChan = m.bus.Subscribe(bus.TopicAll)
 	}
 	
 	go session.Run(ctx, prompt)
@@ -732,7 +766,7 @@ func runAgent(ctx context.Context, session *session.Session, prompt string, m *m
 }
 
 // waitAgentEvent waits for the next event from an agent stream.
-func waitAgentEvent(ch eventbus.EventChan) tea.Cmd {
+func waitAgentEvent(ch bus.EventChan) tea.Cmd {
 	return func() tea.Msg {
 		e, ok := <-ch
 		if !ok || e == nil {

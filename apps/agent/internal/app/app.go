@@ -8,11 +8,36 @@ import (
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/storage"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tui"
 )
 
 // Run starts the agent application in TUI mode.
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+	var resume bool
+	var resumeID string
+	if len(args) > 0 && args[0] == "resume" {
+		resume = true
+		args = args[1:]
+		if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+			resumeID = args[0]
+			args = args[1:]
+		} else {
+			// They want to resume but didn't provide an ID, open picker.
+			db, err := storage.InitDB("agent.db")
+			if err == nil {
+				sessions, err := db.ListSessions(10) // show up to 10 recent
+				if err == nil && len(sessions) > 0 {
+					resumeID = selectSessionTUI(sessions)
+					if resumeID == "" {
+						// User canceled picker
+						return nil
+					}
+				}
+			}
+		}
+	}
+
 	logBuffer := tui.NewLogBuffer(500)
 	initialPrompt := strings.TrimSpace(strings.Join(args, " "))
 
@@ -45,7 +70,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	)
 	logger.DebugContext(ctx, "Starting agent app", "llm_provider", cfg.Provider)
 
-	runtime, err := NewRuntime(ctx, cfg, logger)
+	runtime, err := NewRuntime(ctx, cfg, logger, resume, resumeID)
 	if err != nil {
 		return err
 	}

@@ -2,9 +2,10 @@
 package session
 
 import (
-	"strconv"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
@@ -13,8 +14,6 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
-
-var sessionCounter atomic.Uint64
 
 // State groups one conversation with session-scoped prompt, tool, and usage
 // state.
@@ -62,11 +61,26 @@ func WithConcurrentTools(concurrent bool) Option {
 	}
 }
 
-// NewState creates a session with a monotonic process-local ID.
+// WithHistory initializes the session with loaded database state.
+func WithHistory(id string, startedAt time.Time, messages []conversation.Message, usage Usage) Option {
+	return func(s *State) {
+		s.ID = id
+		s.StartedAt = startedAt
+		s.Usage = usage
+		for _, msg := range messages {
+			s.Conversation.Append(msg)
+		}
+	}
+}
+
+// NewState creates a session with a unique ID.
 func NewState(opts ...Option) *State {
-	id := sessionCounter.Add(1)
+	b := make([]byte, 4)
+	rand.Read(b)
+	uniqueID := fmt.Sprintf("session-%s-%s", time.Now().Format("20060102150405"), hex.EncodeToString(b))
+
 	state := &State{
-		ID:             "session-" + strconv.FormatUint(id, 10),
+		ID:             uniqueID,
 		StartedAt:      time.Now().UTC(),
 		Conversation:   conversation.NewConversation(),
 		PromptSnapshot: prompt.SessionPrompt{},
