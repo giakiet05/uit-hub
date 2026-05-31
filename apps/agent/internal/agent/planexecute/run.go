@@ -12,22 +12,29 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 
 	runState := agent.NewRunState(input.SessionID, a.maxSteps)
 	stats := runState.Stats
+	complete := func(reason agent.TerminalReason) {
+		runState.Finish()
+		agent.Emit(ctx, events, agent.RunCompletedEvent{
+			SessionID: input.SessionID,
+			Reason:    reason,
+			Stats:     *stats,
+		})
+	}
+
 	fail := func(err error) {
 		runState.Finish()
-		agent.LogRunStats(a.logger, "plan_execute", ctx, input.SessionID, stats)
-		agent.Emit(ctx, events, agent.RunFailedEvent{SessionID: input.SessionID, Err: err, Stats: *stats})
-	}
-	complete := func() {
-		runState.Finish()
-		agent.LogRunStats(a.logger, "plan_execute", ctx, input.SessionID, stats)
-		agent.Emit(ctx, events, agent.RunCompletedEvent{SessionID: input.SessionID, Reason: agent.TerminalCompleted, Stats: *stats})
+		agent.Emit(ctx, events, agent.RunFailedEvent{
+			SessionID: input.SessionID,
+			Err:       err,
+			Stats:     *stats,
+		})
 	}
 
 	if !agent.Emit(ctx, events, agent.RunStartedEvent{SessionID: input.SessionID, MaxRounds: runState.MaxRounds}) {
 		return
 	}
 	input.Conversation.Append(conversation.NewUserMessage(input.UserPrompt))
-	agent.Trace(a.logger, ctx, "plan_execute.run.started", "Plan-and-execute agent started", "session_id", input.SessionID, "max_steps", a.maxSteps)
+
 
 	plan, err := a.createPlan(ctx, events, input, stats)
 	if err != nil {
@@ -107,6 +114,5 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 	if !agent.Emit(ctx, events, agent.FinalAnswerEvent{SessionID: input.SessionID, Round: stats.Rounds, Message: answer}) {
 		return
 	}
-	agent.Trace(a.logger, ctx, "plan_execute.run.completed", "Plan-and-execute agent completed", "session_id", input.SessionID, "steps", len(results))
-	complete()
+	complete(agent.TerminalCompleted)
 }

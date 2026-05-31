@@ -38,7 +38,7 @@ func (a *PlanAndExecuteAgent) executeStep(
 			return result, nil
 		}
 
-		results, ok := agent.RunToolBatch(ctx, a.logger, "plan_execute", events, input, stats.Rounds, calls, a.toolTimeout, stats)
+		results, ok := agent.RunToolBatch(ctx, "plan_execute", events, input, stats.Rounds, calls, a.toolTimeout, stats)
 		if !ok {
 			return stepResult{}, ctx.Err()
 		}

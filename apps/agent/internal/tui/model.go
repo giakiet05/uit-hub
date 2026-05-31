@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/eventbus"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
@@ -39,11 +40,12 @@ type model struct {
 	conversation     []conversationItem
 	conversationView viewport.Model
 	lastRunUsage     usage.TokenUsage
-	sessionUsage     usage.TokenUsage
 	logLines         []string
 	logView          viewport.Model
 	err              error
 	pendingPermission *agent.ToolPermissionRequestEvent
+	bus              *eventbus.EventBus
+	eventChan        eventbus.EventChan
 }
 
 type conversationRole string
@@ -76,9 +78,8 @@ const (
 
 // agentEventMsg carries one streamed agent event back into the TUI update loop.
 type agentEventMsg struct {
-	stream <-chan agent.Event
-	event  agent.Event
-	ok     bool
+	event agent.Event
+	ok    bool
 }
 
 // logRefreshMsg carries the latest log snapshot into the TUI update loop.
@@ -115,6 +116,7 @@ func newModel(ctx context.Context, session *session.Session, logs *LogBuffer, in
 		conversationView: conversationView,
 		logLines:         []string{},
 		logView:          logView,
+		bus:              session.Bus(), // Assume session exposes bus, or we pass it
 	}
 }
 
@@ -143,11 +145,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateMouse(typed)
 	case agentEventMsg:
 		if !typed.ok {
-			m.running = false
 			return m, nil
 		}
 		m = m.handleAgentEvent(typed.event)
-		return m, waitAgentEvent(typed.stream)
+		return m, waitAgentEvent(m.eventChan)
 	case logRefreshMsg:
 		wasAtBottom := m.logView.AtBottom()
 		m.logLines = typed.lines
@@ -273,7 +274,7 @@ func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 		text: prompt,
 	})
 	m.syncConversation(true)
-	return m, runAgent(m.ctx, m.session, prompt)
+	return m, runAgent(m.ctx, m.session, prompt, &m)
 }
 
 // handleAgentEvent applies a streamed agent event to the TUI state.
@@ -340,25 +341,22 @@ func (m model) handleAgentEvent(event agent.Event) model {
 		m.status = ""
 		m.streamingIndex = -1
 		m.err = typed.Err
-		m.updateUsageStats(typed.Stats.TokenUsage)
+		m.lastRunUsage = typed.Stats.TokenUsage
 		m.conversation = append(m.conversation, conversationItem{
 			role: conversationRoleAssistant,
 			text: "agent error: " + typed.Err.Error(),
 		})
 		m.syncConversation(true)
+		m.running = false
 	case agent.RunCompletedEvent:
 		m.status = ""
 		m.streamingIndex = -1
 		m.err = nil
-		m.updateUsageStats(typed.Stats.TokenUsage)
+		m.lastRunUsage = typed.Stats.TokenUsage
 		m.appendActivity(activityKindDone, "completed: "+string(typed.Reason))
+		m.running = false
 	}
 	return m
-}
-
-func (m *model) updateUsageStats(lastRun usage.TokenUsage) {
-	m.lastRunUsage = lastRun
-	m.sessionUsage.Add(lastRun)
 }
 
 func (m *model) appendActivity(kind activityKind, text string) {
@@ -566,12 +564,13 @@ func (m *model) resizeViewports() {
 }
 
 func (m model) renderUsageLine() string {
+	sessionUsage := m.session.State().GetUsage()
 	content := fmt.Sprintf(
 		"last i/o %d/%d | session i/o %d/%d",
 		m.lastRunUsage.InputTokens,
 		m.lastRunUsage.OutputTokens,
-		m.sessionUsage.InputTokens,
-		m.sessionUsage.OutputTokens,
+		sessionUsage.InputTokens,
+		sessionUsage.OutputTokens,
 	)
 	width := m.conversationView.Width - usageLineStyle.GetHorizontalFrameSize()
 	if width < 1 {
@@ -719,16 +718,31 @@ func logValueStyle(key string, value string) lipgloss.Style {
 }
 
 // runAgent starts an agent event stream as a Bubble Tea command.
-func runAgent(ctx context.Context, session *session.Session, prompt string) tea.Cmd {
-	stream := session.Run(ctx, prompt)
-	return waitAgentEvent(stream)
+func runAgent(ctx context.Context, session *session.Session, prompt string, m *model) tea.Cmd {
+	if m.eventChan == nil && m.bus != nil {
+		m.eventChan = m.bus.Subscribe(eventbus.TopicAll)
+	}
+	
+	go session.Run(ctx, prompt)
+	
+	if m.eventChan != nil {
+		return waitAgentEvent(m.eventChan)
+	}
+	return nil
 }
 
 // waitAgentEvent waits for the next event from an agent stream.
-func waitAgentEvent(stream <-chan agent.Event) tea.Cmd {
+func waitAgentEvent(ch eventbus.EventChan) tea.Cmd {
 	return func() tea.Msg {
-		event, ok := <-stream
-		return agentEventMsg{stream: stream, event: event, ok: ok}
+		e, ok := <-ch
+		if !ok || e == nil {
+			return agentEventMsg{event: nil, ok: false}
+		}
+		event, typeOk := e.(agent.Event)
+		if !typeOk {
+			return agentEventMsg{event: nil, ok: false}
+		}
+		return agentEventMsg{event: event, ok: true}
 	}
 }
 

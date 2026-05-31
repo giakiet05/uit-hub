@@ -3,8 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -18,7 +16,6 @@ import (
 // It returns the tool results in submission order.
 func RunToolBatch(
 	ctx context.Context,
-	logger *slog.Logger,
 	agentType string,
 	events chan<- Event,
 	input RunInput,
@@ -40,25 +37,15 @@ func RunToolBatch(
 	executor := tool.NewExecutor(input.Tools, timeout)
 	var finalResults []tool.Result
 
-	for i, b := range batches {
+	for _, b := range batches {
 		if b.parallel && input.ConcurrentTools {
-			if len(b.calls) > 1 {
-				logger.DebugContext(ctx, "Executing tool batch concurrently", "batch_index", i, "tool_count", len(b.calls))
-			} else {
-				logger.DebugContext(ctx, "Executing single safe tool", "batch_index", i, "tool_name", b.calls[0].Name)
-			}
-			batchResults, ok := runParallelBatch(ctx, logger, agentType, events, input, round, b.calls, timeout, stats, executor)
+			batchResults, ok := runParallelBatch(ctx, agentType, events, input, round, b.calls, timeout, stats, executor)
 			if !ok {
 				return nil, false
 			}
 			finalResults = append(finalResults, batchResults...)
 		} else {
-			if len(b.calls) == 1 {
-				logger.DebugContext(ctx, "Executing single unsafe tool", "batch_index", i, "tool_name", b.calls[0].Name)
-			} else {
-				logger.DebugContext(ctx, "Executing tool batch serially", "batch_index", i, "tool_count", len(b.calls), "safe", b.parallel)
-			}
-			batchResults, ok := runSerialBatch(ctx, logger, agentType, events, input, round, b.calls, timeout, stats, executor)
+			batchResults, ok := runSerialBatch(ctx, agentType, events, input, round, b.calls, timeout, stats, executor)
 			if !ok {
 				return nil, false
 			}
@@ -94,7 +81,6 @@ func partitionToolCalls(calls []conversation.ToolCall, tools *tool.ToolSet) []ba
 
 func runSerialBatch(
 	ctx context.Context,
-	logger *slog.Logger,
 	agentType string,
 	events chan<- Event,
 	input RunInput,
@@ -107,7 +93,7 @@ func runSerialBatch(
 	results := make([]tool.Result, 0, len(calls))
 
 	for _, call := range calls {
-		result, isErr, ok := executeOneTool(ctx, logger, agentType, events, input, round, call, timeout, executor)
+		result, isErr, ok := executeOneTool(ctx, agentType, events, input, round, call, timeout, executor)
 		if !ok {
 			return nil, false
 		}
@@ -122,7 +108,6 @@ func runSerialBatch(
 
 func runParallelBatch(
 	ctx context.Context,
-	logger *slog.Logger,
 	agentType string,
 	events chan<- Event,
 	input RunInput,
@@ -147,7 +132,7 @@ func runParallelBatch(
 				return
 			}
 			
-			result, isErr, ok := executeOneTool(ctx, logger, agentType, events, input, round, call, timeout, executor)
+			result, isErr, ok := executeOneTool(ctx, agentType, events, input, round, call, timeout, executor)
 			
 			mu.Lock()
 			if !ok {
@@ -172,7 +157,6 @@ func runParallelBatch(
 
 func executeOneTool(
 	ctx context.Context,
-	logger *slog.Logger,
 	agentType string,
 	events chan<- Event,
 	input RunInput,
@@ -228,16 +212,6 @@ func executeOneTool(
 	}) {
 		return tool.Result{}, false, false
 	}
-
-	Trace(logger, ctx,
-		agentType+".tool.started",
-		fmt.Sprintf("Round %d: Tool %s started", round, call.Name),
-		"session_id", input.SessionID,
-		"round", round,
-		"tool_call_id", call.ID,
-		"tool_name", call.Name,
-		"arguments_preview", PreviewValue(call.Arguments),
-	)
 
 	startedAt := time.Now()
 	result, err := executor.Execute(ctx, tool.Call{

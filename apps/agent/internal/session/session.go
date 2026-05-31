@@ -3,9 +3,11 @@ package session
 
 import (
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
@@ -17,6 +19,7 @@ var sessionCounter atomic.Uint64
 // State groups one conversation with session-scoped prompt, tool, and usage
 // state.
 type State struct {
+	mu             sync.RWMutex
 	ID             string
 	StartedAt      time.Time
 	Conversation   conversation.Conversation
@@ -106,4 +109,28 @@ func (s *State) ToolDefinition(name string) (tool.Definition, bool) {
 		return tool.Definition{}, false
 	}
 	return s.Tools.Definition(name)
+}
+
+// AddRunStats accumulates the metrics from a completed agent run.
+func (s *State) AddRunStats(stats agent.RunStats) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Usage.Runs++
+	s.Usage.LLMCalls += stats.LLMCalls
+	s.Usage.ToolCalls += stats.ToolCalls
+	s.Usage.ToolFailures += stats.ToolFailures
+	s.Usage.TokenUsage.Add(stats.TokenUsage)
+}
+
+// GetUsage returns a safe copy of the current session usage metrics.
+func (s *State) GetUsage() Usage {
+	if s == nil {
+		return Usage{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.Usage
 }

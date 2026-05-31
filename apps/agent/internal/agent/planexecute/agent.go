@@ -2,12 +2,10 @@ package planexecute
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
 )
 
 const (
@@ -22,7 +20,6 @@ const (
 // before the next module is called.
 type PlanAndExecuteAgent struct {
 	provider      llm.Provider
-	logger        *slog.Logger
 	maxSteps      int
 	maxStepRounds int
 	maxReplans    int
@@ -36,7 +33,6 @@ type PlanAndExecuteOption func(*PlanAndExecuteAgent)
 func NewPlanAndExecuteAgent(provider llm.Provider, opts ...PlanAndExecuteOption) *PlanAndExecuteAgent {
 	agent := &PlanAndExecuteAgent{
 		provider:      provider,
-		logger:        logging.NewNopLogger(),
 		maxSteps:      defaultMaxPlanSteps,
 		maxStepRounds: defaultMaxStepRounds,
 		maxReplans:    defaultMaxReplans,
@@ -50,14 +46,7 @@ func NewPlanAndExecuteAgent(provider llm.Provider, opts ...PlanAndExecuteOption)
 	return agent
 }
 
-// WithPlanLogger sets the structured logger.
-func WithPlanLogger(logger *slog.Logger) PlanAndExecuteOption {
-	return func(agent *PlanAndExecuteAgent) {
-		if logger != nil {
-			agent.logger = logger
-		}
-	}
-}
+
 
 // WithPlanMaxSteps overrides the maximum number of planned steps.
 func WithPlanMaxSteps(maxSteps int) PlanAndExecuteOption {

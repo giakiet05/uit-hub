@@ -2,12 +2,10 @@ package react
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
 )
 
 const defaultMaxToolIterations = 8
@@ -17,7 +15,6 @@ const defaultToolTimeout = 15 * time.Second
 // agents.
 type ReActAgent struct {
 	provider    llm.Provider
-	logger      *slog.Logger
 	maxRounds   int
 	toolTimeout time.Duration
 }
@@ -29,7 +26,6 @@ type ReActOption func(*ReActAgent)
 func NewReActAgent(provider llm.Provider, opts ...ReActOption) *ReActAgent {
 	agent := &ReActAgent{
 		provider:    provider,
-		logger:      logging.NewNopLogger(),
 		maxRounds:   defaultMaxToolIterations,
 		toolTimeout: defaultToolTimeout,
 	}
@@ -39,15 +35,6 @@ func NewReActAgent(provider llm.Provider, opts ...ReActOption) *ReActAgent {
 	}
 
 	return agent
-}
-
-// WithLogger sets the structured logger.
-func WithLogger(logger *slog.Logger) ReActOption {
-	return func(agent *ReActAgent) {
-		if logger != nil {
-			agent.logger = logger
-		}
-	}
 }
 
 // WithMaxRounds overrides the maximum ReAct loop rounds when maxRounds is

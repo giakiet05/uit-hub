@@ -21,14 +21,12 @@ func newAgent(
 	case "", agent.TypeReAct:
 		return react.NewReActAgent(
 			provider,
-			react.WithLogger(logger),
 			react.WithMaxRounds(cfg.Agent.MaxRounds),
 			react.WithToolTimeout(cfg.Agent.ToolTimeout),
 		), nil
 	case agent.TypePlanAndExecute:
 		return planexecute.NewPlanAndExecuteAgent(
 			provider,
-			planexecute.WithPlanLogger(logger),
 			planexecute.WithPlanMaxSteps(cfg.Agent.MaxRounds),
 			planexecute.WithPlanToolTimeout(cfg.Agent.ToolTimeout),
 		), nil

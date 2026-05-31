@@ -4,14 +4,20 @@ import (
 	"context"
 	"log/slog"
 
+
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/eventbus"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/eventhandler"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 )
 
 // Runtime owns the reusable agent core shared by TUI and eval frontends.
 type Runtime struct {
-	State   *State
-	Session *session.Session
+	State              *State
+	Session            *session.Session
+	Bus                *eventbus.EventBus
+	UsageEventHandler  *eventhandler.UsageEventHandler
+	LoggerEventHandler *eventhandler.LoggerEventHandler
 }
 
 // NewRuntime wires provider, memory, tools, prompt, and session state.
@@ -52,6 +58,14 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger) (*R
 		return nil, err
 	}
 
+	bus := eventbus.New(128, logger)
+	
+	usageSub := eventhandler.NewUsageEventHandler(ctx, sessionState, bus, logger)
+	usageSub.Start()
+	
+	loggerSub := eventhandler.NewLoggerEventHandler(ctx, bus, logger)
+	loggerSub.Start()
+
 	logger.DebugContext(ctx, "Startup configuration",
 		"provider", cfg.Provider,
 		"agent_type", cfg.Agent.Type,
@@ -63,15 +77,28 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger) (*R
 	)
 
 	return &Runtime{
-		State:   state,
-		Session: session.NewSession(sessionState, runtimeAgent),
+		State:              state,
+		Session:            session.NewSession(sessionState, runtimeAgent, bus),
+		Bus:                bus,
+		UsageEventHandler:  usageSub,
+		LoggerEventHandler: loggerSub,
 	}, nil
 }
 
-// Close releases runtime-owned resources such as MCP sessions.
 func (r *Runtime) Close(ctx context.Context) {
-	if r == nil || r.State == nil {
+	if r == nil {
 		return
 	}
-	closeAll(ctx, r.State.Logger, r.State.Closers)
+	if r.UsageEventHandler != nil {
+		r.UsageEventHandler.Stop()
+	}
+	if r.LoggerEventHandler != nil {
+		r.LoggerEventHandler.Stop()
+	}
+	if r.Bus != nil {
+		r.Bus.Close()
+	}
+	if r.State != nil {
+		closeAll(ctx, r.State.Logger, r.State.Closers)
+	}
 }
