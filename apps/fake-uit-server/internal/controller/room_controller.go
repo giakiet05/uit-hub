@@ -8,14 +8,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (c *UitController) Login(ctx *gin.Context) {
-	var req dto.LoginRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+func (c *UitController) GetRoomsAvailability(ctx *gin.Context) {
+
+	var query dto.QueryRoomsAvailability
+	if err := ctx.ShouldBindQuery(&query); err != nil {
 		dto.SendError(ctx, apperror.ErrBadRequest)
 		return
 	}
 
-	res, appErr := c.service.Login(req)
+	res, appErr := c.service.GetRoomsAvailability(query)
 	if appErr != nil {
 		dto.SendError(ctx, *appErr)
 		return
