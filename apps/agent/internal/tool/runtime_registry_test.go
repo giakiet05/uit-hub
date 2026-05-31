@@ -136,6 +136,10 @@ func (t testTool) Definition() Definition {
 	}
 }
 
+func (t testTool) Metadata() Metadata {
+	return NewReadOnlyMetadata(true, DefaultMaxResultChars)
+}
+
 func (t testTool) Execute(ctx context.Context, call Call) (Result, error) {
 	return Result{
 		CallID:  call.ID,

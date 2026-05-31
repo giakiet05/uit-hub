@@ -1,17 +1,20 @@
 package agent
 
-import "time"
+import (
+	"time"
+
+	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
+)
 
 // RunStats records the high-level counters for a single agent run.
 type RunStats struct {
+	usage.TokenUsage
 	StartedAt    time.Time
 	FinishedAt   time.Time
 	Rounds       int
 	LLMCalls     int
 	ToolCalls    int
 	ToolFailures int
-	InputTokens  int
-	OutputTokens int
 }
 
 // NewRunStats starts a stats record with the current time.

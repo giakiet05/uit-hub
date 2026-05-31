@@ -22,7 +22,7 @@ func TestNewToolSetLoadsMockMCPToolCatalog(t *testing.T) {
 	defer cancel()
 
 	repoRoot := filepath.Clean("../../../..")
-	toolSet, mcpManager, closers, err := newToolSet(ctx, config.Config{
+	cfg := config.Config{
 		Provider: llm.ProviderTypeOpenAI,
 		MCP: config.MCPConfig{
 			ClientName:    "uit-hub-agent-test",
@@ -37,11 +37,16 @@ func TestNewToolSetLoadsMockMCPToolCatalog(t *testing.T) {
 				},
 			},
 		},
-	}, logging.NewNopLogger(), nil)
+	}
+	mcpManager, closers, err := newMCPManager(ctx, cfg, logging.NewNopLogger())
 	if err != nil {
-		t.Fatalf("newToolSet() error = %v", err)
+		t.Fatalf("newMCPManager() error = %v", err)
 	}
 	defer closeAll(ctx, logging.NewNopLogger(), closers)
+	toolSet, err := newSessionToolSet(cfg, nil, mcpManager)
+	if err != nil {
+		t.Fatalf("newSessionToolSet() error = %v", err)
+	}
 
 	names := []string{}
 	for _, definition := range toolSet.Definitions() {
@@ -49,6 +54,9 @@ func TestNewToolSetLoadsMockMCPToolCatalog(t *testing.T) {
 	}
 	if !slices.Contains(names, "load_mcp_tool") {
 		t.Fatalf("base tools missing load_mcp_tool: %v", names)
+	}
+	if !slices.Contains(names, "calculator") {
+		t.Fatalf("base tools missing calculator: %v", names)
 	}
 	if slices.Contains(names, "mock_uit__get_student_profile") {
 		t.Fatalf("MCP tool was eagerly registered in base tools: %v", names)
@@ -61,10 +69,18 @@ func TestNewToolSetLoadsMockMCPToolCatalog(t *testing.T) {
 	for _, want := range []string{
 		"mock_uit__get_student_profile",
 		"mock_uit__search_courses",
+		"mock_uit__get_student_schedule",
+		"mock_uit__get_course_detail",
+		"mock_uit__get_tuition_status",
 		"mock_uit__upsert_student_note",
 		"mock_uit__list_student_notes",
 		"mock_uit__delete_student_note",
 		"mock_uit__submit_leave_request",
+		"mock_uit__create_study_plan",
+		"mock_uit__patch_study_plan",
+		"mock_uit__create_advisor_ticket",
+		"mock_uit__patch_advisor_ticket",
+		"mock_uit__submit_support_request",
 	} {
 		if !slices.Contains(catalogNames, want) {
 			t.Fatalf("catalog missing %q: %v", want, catalogNames)
@@ -82,7 +98,7 @@ func TestNewToolSetKeepsWorkingWhenMCPServerFails(t *testing.T) {
 
 	repoRoot := filepath.Clean("../../../..")
 	attemptFile := filepath.Join(t.TempDir(), "retry-attempt")
-	toolSet, mcpManager, closers, err := newToolSet(ctx, config.Config{
+	cfg := config.Config{
 		Provider: llm.ProviderTypeOpenAI,
 		MCP: config.MCPConfig{
 			ClientName:    "uit-hub-agent-test",
@@ -105,11 +121,16 @@ func TestNewToolSetKeepsWorkingWhenMCPServerFails(t *testing.T) {
 				},
 			},
 		},
-	}, logging.NewNopLogger(), nil)
+	}
+	mcpManager, closers, err := newMCPManager(ctx, cfg, logging.NewNopLogger())
 	if err != nil {
-		t.Fatalf("newToolSet() error = %v", err)
+		t.Fatalf("newMCPManager() error = %v", err)
 	}
 	defer closeAll(ctx, logging.NewNopLogger(), closers)
+	toolSet, err := newSessionToolSet(cfg, nil, mcpManager)
+	if err != nil {
+		t.Fatalf("newSessionToolSet() error = %v", err)
+	}
 
 	names := []string{}
 	for _, definition := range toolSet.Definitions() {
@@ -134,16 +155,21 @@ func TestNewToolSetKeepsWorkingWhenMCPServerFails(t *testing.T) {
 func TestNewToolSetRegistersMemoryTools(t *testing.T) {
 	ctx := context.Background()
 
-	toolSet, _, closers, err := newToolSet(ctx, config.Config{
+	cfg := config.Config{
 		Provider: llm.ProviderTypeOpenAI,
 		Memory: config.MemoryConfig{
 			Path: t.TempDir(),
 		},
-	}, logging.NewNopLogger(), memory.NewFileStore(t.TempDir()))
+	}
+	mcpManager, closers, err := newMCPManager(ctx, cfg, logging.NewNopLogger())
 	if err != nil {
-		t.Fatalf("newToolSet() error = %v", err)
+		t.Fatalf("newMCPManager() error = %v", err)
 	}
 	defer closeAll(ctx, logging.NewNopLogger(), closers)
+	toolSet, err := newSessionToolSet(cfg, memory.NewFileStore(t.TempDir()), mcpManager)
+	if err != nil {
+		t.Fatalf("newSessionToolSet() error = %v", err)
+	}
 
 	names := []string{}
 	for _, definition := range toolSet.Definitions() {

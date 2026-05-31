@@ -37,7 +37,7 @@ func NewLoadMCPTool(loader MCPToolLoader, registry RuntimeToolRegistry) *LoadMCP
 func (t *LoadMCPTool) Definition() tool.Definition {
 	return tool.Definition{
 		Name:        "load_mcp_tool",
-		Description: "Load one MCP catalog tool by exact namespaced name so it can be used in the next round.",
+		Description: "Load one MCP catalog tool by exact namespaced name (e.g., 'mock_uit__get_student_profile'). Do NOT pass just the server name. Load each MCP tool at most once; in the next round, call the loaded tool directly, possibly multiple times with different arguments.",
 		InputSchema: tool.ObjectSchema(
 			map[string]any{
 				"name": tool.StringProperty("Exact namespaced MCP tool name from the MCP tool catalog."),
@@ -45,6 +45,11 @@ func (t *LoadMCPTool) Definition() tool.Definition {
 			"name",
 		),
 	}
+}
+
+// Metadata returns the tool metadata.
+func (t *LoadMCPTool) Metadata() tool.Metadata {
+	return tool.NewWriteMetadata(false, false, tool.DefaultMaxResultChars)
 }
 
 // Execute loads one MCP tool into the runtime registry.
@@ -61,7 +66,11 @@ func (t *LoadMCPTool) Execute(ctx context.Context, call tool.Call) (tool.Result,
 
 	name, err := stringArg(call.Arguments, "name")
 	if err != nil {
-		return tool.Result{}, err
+		return tool.Result{}, tool.ToolError{
+			Type: tool.ErrorTypeValidation,
+			Name: call.Name,
+			Err:  fmt.Errorf("invalid arguments: %w", err),
+		}
 	}
 	if t.registry.Has(name) {
 		return tool.Result{
@@ -73,7 +82,11 @@ func (t *LoadMCPTool) Execute(ctx context.Context, call tool.Call) (tool.Result,
 
 	loadedTool, exists := t.loader.LoadTool(name)
 	if !exists {
-		return tool.Result{}, fmt.Errorf("unknown MCP tool %q", name)
+		return tool.Result{}, tool.ToolError{
+			Type: tool.ErrorTypeValidation,
+			Name: call.Name,
+			Err:  fmt.Errorf("unknown MCP tool %q. You must provide the exact namespaced name (e.g., 'mock_uit__get_student_profile') from the catalog", name),
+		}
 	}
 	if err := t.registry.Register(loadedTool); err != nil {
 		return tool.Result{}, err

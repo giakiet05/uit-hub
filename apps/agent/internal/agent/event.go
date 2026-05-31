@@ -4,13 +4,15 @@ import (
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
 
 // Event is the closed set of events emitted by an agent loop.
 type Event interface {
 	isAgentEvent()
+	Topic() bus.Topic
 }
 
 // TerminalReason explains why an agent loop stopped.
@@ -49,7 +51,7 @@ type ModelCallStartedEvent struct {
 type ModelCallCompletedEvent struct {
 	SessionID     string
 	Round         int
-	Usage         llm.Usage
+	Usage         usage.TokenUsage
 	Duration      time.Duration
 	ToolCallNames []string
 	MessageText   string
@@ -64,12 +66,68 @@ type ModelTextDeltaEvent struct {
 	Delta     string
 }
 
+// PlanCreatedEvent is emitted when a plan-and-execute run creates its initial
+// structured plan.
+type PlanCreatedEvent struct {
+	SessionID string
+	StepCount int
+	Summary   string
+}
+
+// StepStartedEvent is emitted before executing one planned step.
+type StepStartedEvent struct {
+	SessionID   string
+	StepID      string
+	Description string
+}
+
+// StepCompletedEvent is emitted after one planned step finishes successfully.
+type StepCompletedEvent struct {
+	SessionID string
+	StepID    string
+	Summary   string
+}
+
+// StepFailedEvent is emitted when one planned step fails before replanning.
+type StepFailedEvent struct {
+	SessionID string
+	StepID    string
+	Err       error
+}
+
+// ReplanStartedEvent is emitted before asking the model to repair a failed
+// plan or step.
+type ReplanStartedEvent struct {
+	SessionID string
+	StepID    string
+}
+
+// PlanUpdatedEvent is emitted after replanning changes the remaining work.
+type PlanUpdatedEvent struct {
+	SessionID string
+	Summary   string
+}
+
+// FinalizingEvent is emitted before synthesizing the final answer from step
+// results.
+type FinalizingEvent struct {
+	SessionID string
+}
+
 // ToolCallStartedEvent is emitted before executing one tool call.
 type ToolCallStartedEvent struct {
 	SessionID string
 	Round     int
 	Call      conversation.ToolCall
 	Timeout   time.Duration
+}
+
+// ToolPermissionRequestEvent is emitted when a tool requires user approval before execution.
+type ToolPermissionRequestEvent struct {
+	SessionID string
+	Round     int
+	Call      conversation.ToolCall
+	Response  chan bool
 }
 
 // ToolCallCompletedEvent is emitted after a tool call succeeds.
@@ -113,13 +171,58 @@ type RunFailedEvent struct {
 }
 
 func (RunStartedEvent) isAgentEvent()         {}
-func (RoundStartedEvent) isAgentEvent()       {}
-func (ModelCallStartedEvent) isAgentEvent()   {}
-func (ModelCallCompletedEvent) isAgentEvent() {}
-func (ModelTextDeltaEvent) isAgentEvent()     {}
-func (ToolCallStartedEvent) isAgentEvent()    {}
-func (ToolCallCompletedEvent) isAgentEvent()  {}
-func (ToolCallFailedEvent) isAgentEvent()     {}
-func (FinalAnswerEvent) isAgentEvent()        {}
-func (RunCompletedEvent) isAgentEvent()       {}
-func (RunFailedEvent) isAgentEvent()          {}
+func (RunStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (RoundStartedEvent) isAgentEvent()         {}
+func (RoundStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (ModelCallStartedEvent) isAgentEvent()         {}
+func (ModelCallStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (ModelCallCompletedEvent) isAgentEvent()         {}
+func (ModelCallCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (ModelTextDeltaEvent) isAgentEvent()         {}
+func (ModelTextDeltaEvent) Topic() bus.Topic { return bus.TopicStream }
+
+func (PlanCreatedEvent) isAgentEvent()         {}
+func (PlanCreatedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (StepStartedEvent) isAgentEvent()         {}
+func (StepStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (StepCompletedEvent) isAgentEvent()         {}
+func (StepCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (StepFailedEvent) isAgentEvent()         {}
+func (StepFailedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (ReplanStartedEvent) isAgentEvent()         {}
+func (ReplanStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (PlanUpdatedEvent) isAgentEvent()         {}
+func (PlanUpdatedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (FinalizingEvent) isAgentEvent()         {}
+func (FinalizingEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (ToolCallStartedEvent) isAgentEvent()         {}
+func (ToolCallStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (ToolPermissionRequestEvent) isAgentEvent()         {}
+func (ToolPermissionRequestEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (ToolCallCompletedEvent) isAgentEvent()         {}
+func (ToolCallCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (ToolCallFailedEvent) isAgentEvent()         {}
+func (ToolCallFailedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (FinalAnswerEvent) isAgentEvent()         {}
+func (FinalAnswerEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (RunCompletedEvent) isAgentEvent()         {}
+func (RunCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (RunFailedEvent) isAgentEvent()         {}
+func (RunFailedEvent) Topic() bus.Topic { return bus.TopicLifecycle }

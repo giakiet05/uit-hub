@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant TUI
+    participant Runtime
+    participant ReActAgent
+    participant LLM
+    participant Tools
+
+    User->>TUI: Tra hồ sơ SV 22520001 và lịch học hôm nay
+    TUI->>Runtime: Submit message
+    Runtime->>ReActAgent: Run(conversation, toolset)
+
+    ReActAgent->>LLM: Round 1: think with full task
+    LLM-->>ReActAgent: Need student profile tool
+    ReActAgent->>Tools: load_mcp_tool(get_student_profile)
+    Tools-->>ReActAgent: Tool loaded
+
+    ReActAgent->>LLM: Round 2: think again with history
+    LLM-->>ReActAgent: Call get_student_profile
+    ReActAgent->>Tools: get_student_profile(student_id)
+    Tools-->>ReActAgent: Profile observation
+
+    ReActAgent->>LLM: Round 3: think again with profile
+    LLM-->>ReActAgent: Need schedule tool
+    ReActAgent->>Tools: load_mcp_tool(get_today_schedule)
+    Tools-->>ReActAgent: Tool loaded
+
+    ReActAgent->>LLM: Round 4: think again with history
+    LLM-->>ReActAgent: Call get_today_schedule
+    ReActAgent->>Tools: get_today_schedule(student_id)
+    Tools-->>ReActAgent: Schedule observation
+
+    ReActAgent->>LLM: Round 5: synthesize final answer
+    LLM-->>ReActAgent: Final answer
+    ReActAgent-->>Runtime: Completed(answer, stats)
+    Runtime-->>TUI: Stream answer and stats
+    TUI-->>User: Show final answer

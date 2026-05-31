@@ -8,7 +8,7 @@ import (
 
 const defaultRuntimeRegistryLimit = 20
 
-// RuntimeRegistry stores tools discovered while an agent run is active.
+// RuntimeRegistry stores tools discovered while a session is active.
 type RuntimeRegistry struct {
 	tools          map[string]Tool
 	definitions    map[string]Definition
@@ -77,6 +77,16 @@ func (r *RuntimeRegistry) Definition(name string) (Definition, bool) {
 
 	definition, exists := r.definitions[name]
 	return definition, exists
+}
+
+// Tool returns one runtime tool by name.
+func (r *RuntimeRegistry) Tool(name string) (Tool, bool) {
+	if r == nil {
+		return nil, false
+	}
+
+	selected, exists := r.tools[name]
+	return selected, exists
 }
 
 // Definitions returns runtime tool definitions in registration order.

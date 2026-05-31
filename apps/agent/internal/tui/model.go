@@ -14,7 +14,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
 
 const (
@@ -25,8 +27,7 @@ const (
 
 type model struct {
 	ctx              context.Context
-	session          *runtime.Session
-	agent            agent.Agent
+	session          *session.Session
 	logs             *LogBuffer
 	width            int
 	height           int
@@ -38,9 +39,13 @@ type model struct {
 	mouseEnabled     bool
 	conversation     []conversationItem
 	conversationView viewport.Model
+	lastRunUsage     usage.TokenUsage
 	logLines         []string
 	logView          viewport.Model
 	err              error
+	pendingPermission *agent.ToolPermissionRequestEvent
+	bus              *bus.EventBus
+	eventChan        bus.EventChan
 }
 
 type conversationRole string
@@ -67,13 +72,14 @@ const (
 	activityKindObserve  activityKind = "observe"
 	activityKindError    activityKind = "error"
 	activityKindDone     activityKind = "done"
+	activityKindPlan     activityKind = "plan"
+	activityKindStep     activityKind = "step"
 )
 
 // agentEventMsg carries one streamed agent event back into the TUI update loop.
 type agentEventMsg struct {
-	stream <-chan agent.Event
-	event  agent.Event
-	ok     bool
+	event agent.Event
+	ok    bool
 }
 
 // logRefreshMsg carries the latest log snapshot into the TUI update loop.
@@ -82,7 +88,7 @@ type logRefreshMsg struct {
 }
 
 // newModel creates the Bubble Tea model and initializes viewports and input.
-func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.Agent, logs *LogBuffer, initialPrompt string) model {
+func newModel(ctx context.Context, session *session.Session, logs *LogBuffer, initialPrompt string) model {
 	initialPrompt = strings.TrimSpace(initialPrompt)
 	conversationView := viewport.New(1, 1)
 	conversationView.MouseWheelDelta = mouseScrollLines
@@ -101,17 +107,51 @@ func newModel(ctx context.Context, session *runtime.Session, runtimeAgent agent.
 	return model{
 		ctx:              ctx,
 		session:          session,
-		agent:            runtimeAgent,
 		logs:             logs,
 		input:            input,
 		streamingIndex:   -1,
 		initialRun:       initialPrompt != "",
 		mouseEnabled:     false,
-		conversation:     []conversationItem{},
+		conversation:     buildInitialConversation(session),
 		conversationView: conversationView,
 		logLines:         []string{},
 		logView:          logView,
+		bus:              session.Bus(), // Assume session exposes bus, or we pass it
 	}
+}
+
+func buildInitialConversation(session *session.Session) []conversationItem {
+	var items []conversationItem
+	if session == nil || session.State() == nil {
+		return items
+	}
+
+	messages := session.State().Conversation.Messages()
+	for _, msg := range messages {
+		text := conversation.Text(msg)
+		switch typed := msg.(type) {
+		case conversation.UserMessage:
+			items = append(items, conversationItem{role: conversationRoleUser, text: text})
+		case conversation.AssistantMessage:
+			if text != "" {
+				items = append(items, conversationItem{role: conversationRoleAssistant, text: text})
+			}
+			for _, call := range typed.ToolCalls {
+				items = append(items, conversationItem{
+					role:         conversationRoleActivity,
+					activityKind: activityKindTool,
+					text:         "tool " + call.Name + previewToolArguments(call.Arguments),
+				})
+			}
+		case conversation.ToolResultMessage:
+			items = append(items, conversationItem{
+				role:         conversationRoleActivity,
+				activityKind: activityKindObserve,
+				text:         "tool completed",
+			})
+		}
+	}
+	return items
 }
 
 // Init starts periodic log refresh and the text-input cursor blink.
@@ -139,11 +179,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateMouse(typed)
 	case agentEventMsg:
 		if !typed.ok {
-			m.running = false
 			return m, nil
 		}
 		m = m.handleAgentEvent(typed.event)
-		return m, waitAgentEvent(typed.stream)
+		return m, waitAgentEvent(m.eventChan)
 	case logRefreshMsg:
 		wasAtBottom := m.logView.AtBottom()
 		m.logLines = typed.lines
@@ -160,6 +199,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateKey handles keyboard shortcuts and prompt editing.
 func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.pendingPermission != nil {
+		switch msg.String() {
+		case "ctrl+c":
+			m.pendingPermission.Response <- false
+			m.pendingPermission = nil
+			m.resizeViewports()
+			return m, tea.Quit
+		case "y", "Y":
+			m.pendingPermission.Response <- true
+			m.pendingPermission = nil
+			m.resizeViewports()
+			return m, nil
+		case "n", "N", "esc":
+			m.pendingPermission.Response <- false
+			m.pendingPermission = nil
+			m.resizeViewports()
+			return m, nil
+		default:
+			// ignore other keys while pending permission
+			return m, nil
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c", "esc":
 		return m, tea.Quit
@@ -246,7 +308,7 @@ func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 		text: prompt,
 	})
 	m.syncConversation(true)
-	return m, runAgent(m.ctx, m.agent, m.session, prompt)
+	return m, runAgent(m.ctx, m.session, prompt, &m)
 }
 
 // handleAgentEvent applies a streamed agent event to the TUI state.
@@ -265,6 +327,29 @@ func (m model) handleAgentEvent(event agent.Event) model {
 	case agent.ModelTextDeltaEvent:
 		m.status = "streaming"
 		m.appendAssistantDelta(typed.Delta)
+	case agent.PlanCreatedEvent:
+		m.status = "plan"
+		m.streamingIndex = -1
+		m.appendActivity(activityKindPlan, fmt.Sprintf("plan: %s", typed.Summary))
+	case agent.StepStartedEvent:
+		m.status = "step " + typed.StepID
+		m.streamingIndex = -1
+		m.appendActivity(activityKindStep, fmt.Sprintf("%s: %s", typed.StepID, typed.Description))
+	case agent.StepCompletedEvent:
+		m.status = "step completed " + typed.StepID
+		m.appendActivity(activityKindObserve, fmt.Sprintf("%s completed: %s", typed.StepID, typed.Summary))
+	case agent.StepFailedEvent:
+		m.status = "step failed " + typed.StepID
+		m.appendActivity(activityKindError, fmt.Sprintf("%s failed: %v", typed.StepID, typed.Err))
+	case agent.ReplanStartedEvent:
+		m.status = "replanning"
+		m.appendActivity(activityKindPlan, "replanning after "+typed.StepID)
+	case agent.PlanUpdatedEvent:
+		m.status = "plan updated"
+		m.appendActivity(activityKindPlan, "plan updated: "+typed.Summary)
+	case agent.FinalizingEvent:
+		m.status = "finalizing"
+		m.appendActivity(activityKindThinking, "finalizing")
 	case agent.ToolCallStartedEvent:
 		m.status = "tool " + typed.Call.Name
 		m.streamingIndex = -1
@@ -275,6 +360,13 @@ func (m model) handleAgentEvent(event agent.Event) model {
 	case agent.ToolCallFailedEvent:
 		m.status = "tool failed " + typed.Call.Name
 		m.appendActivity(activityKindError, "tool failed "+typed.Call.Name+": "+typed.Observation)
+	case agent.ToolPermissionRequestEvent:
+		m.status = "waiting for permission: " + typed.Call.Name
+		// We make a copy because the event value is passed by value in typed
+		eventCopy := typed
+		m.pendingPermission = &eventCopy
+		m.appendActivity(activityKindTool, "requesting permission for tool "+typed.Call.Name)
+		m.resizeViewports()
 	case agent.FinalAnswerEvent:
 		m.status = "answer"
 		m.setFinalAnswer(conversation.Text(typed.Message))
@@ -283,16 +375,20 @@ func (m model) handleAgentEvent(event agent.Event) model {
 		m.status = ""
 		m.streamingIndex = -1
 		m.err = typed.Err
+		m.lastRunUsage = typed.Stats.TokenUsage
 		m.conversation = append(m.conversation, conversationItem{
 			role: conversationRoleAssistant,
 			text: "agent error: " + typed.Err.Error(),
 		})
 		m.syncConversation(true)
+		m.running = false
 	case agent.RunCompletedEvent:
 		m.status = ""
 		m.streamingIndex = -1
 		m.err = nil
+		m.lastRunUsage = typed.Stats.TokenUsage
 		m.appendActivity(activityKindDone, "completed: "+string(typed.Reason))
+		m.running = false
 	}
 	return m
 }
@@ -410,10 +506,30 @@ func (m model) View() string {
 	}
 
 	conversationPane := m.conversationView.View()
+	conversationPane = lipgloss.JoinVertical(lipgloss.Left, conversationPane, m.renderUsageLine())
 	logPane := m.logView.View()
 	main := lipgloss.JoinHorizontal(lipgloss.Top, conversationPane, logPane)
 
-	return lipgloss.JoinVertical(lipgloss.Left, main, m.renderInput())
+	view := main
+	if m.pendingPermission != nil {
+		title := "⚠️ Tool Permission Request: " + m.pendingPermission.Call.Name
+		desc := previewToolArguments(m.pendingPermission.Call.Arguments)
+		prompt := "Allow execution? (y/N/Esc)"
+
+		banner := lipgloss.NewStyle().
+			Background(lipgloss.Color("203")).
+			Foreground(lipgloss.Color("232")).
+			Bold(true).
+			Padding(0, 1).
+			Width(m.width).
+			Height(2).
+			MaxHeight(2).
+			Render(fmt.Sprintf("%s\n%s | %s", title, desc, prompt))
+
+		view = lipgloss.JoinVertical(lipgloss.Left, view, banner)
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, view, m.renderInput())
 }
 
 // renderInput renders the bottom prompt box and transient status text.
@@ -450,6 +566,9 @@ func (m model) agentStatus() string {
 // mainHeight returns the height available to the conversation and log panes.
 func (m model) mainHeight() int {
 	mainHeight := m.height - inputHeight
+	if m.pendingPermission != nil {
+		mainHeight -= 2 // height of the banner
+	}
 	if mainHeight < 1 {
 		return 1
 	}
@@ -468,11 +587,30 @@ func (m *model) resizeViewports() {
 	}
 	m.input.Width = inputWidth
 	m.conversationView.Width = leftWidth
-	m.conversationView.Height = mainHeight
+	m.conversationView.Height = mainHeight - 1
+	if m.conversationView.Height < 1 {
+		m.conversationView.Height = 1
+	}
 	m.logView.Width = rightWidth
 	m.logView.Height = mainHeight
 	m.syncConversation(false)
 	m.syncLogs(false)
+}
+
+func (m model) renderUsageLine() string {
+	sessionUsage := m.session.State().GetUsage()
+	content := fmt.Sprintf(
+		"last i/o %d/%d | session i/o %d/%d",
+		m.lastRunUsage.InputTokens,
+		m.lastRunUsage.OutputTokens,
+		sessionUsage.InputTokens,
+		sessionUsage.OutputTokens,
+	)
+	width := m.conversationView.Width - usageLineStyle.GetHorizontalFrameSize()
+	if width < 1 {
+		width = 1
+	}
+	return usageLineStyle.Width(width).Render(content)
 }
 
 // syncConversation refreshes the conversation viewport content.
@@ -614,16 +752,31 @@ func logValueStyle(key string, value string) lipgloss.Style {
 }
 
 // runAgent starts an agent event stream as a Bubble Tea command.
-func runAgent(ctx context.Context, runtimeAgent agent.Agent, session *runtime.Session, prompt string) tea.Cmd {
-	stream := runtimeAgent.Run(ctx, session, prompt)
-	return waitAgentEvent(stream)
+func runAgent(ctx context.Context, session *session.Session, prompt string, m *model) tea.Cmd {
+	if m.eventChan == nil && m.bus != nil {
+		m.eventChan = m.bus.Subscribe(bus.TopicAll)
+	}
+	
+	go session.Run(ctx, prompt)
+	
+	if m.eventChan != nil {
+		return waitAgentEvent(m.eventChan)
+	}
+	return nil
 }
 
 // waitAgentEvent waits for the next event from an agent stream.
-func waitAgentEvent(stream <-chan agent.Event) tea.Cmd {
+func waitAgentEvent(ch bus.EventChan) tea.Cmd {
 	return func() tea.Msg {
-		event, ok := <-stream
-		return agentEventMsg{stream: stream, event: event, ok: ok}
+		e, ok := <-ch
+		if !ok || e == nil {
+			return agentEventMsg{event: nil, ok: false}
+		}
+		event, typeOk := e.(agent.Event)
+		if !typeOk {
+			return agentEventMsg{event: nil, ok: false}
+		}
+		return agentEventMsg{event: event, ok: true}
 	}
 }
 
@@ -664,6 +817,10 @@ var userMessageStyle = lipgloss.NewStyle().
 var assistantMessageStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("250"))
 
+var usageLineStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("244")).
+	Padding(0, 1)
+
 func activityMessageStyle(kind activityKind) lipgloss.Style {
 	switch kind {
 	case activityKindRound:
@@ -680,6 +837,10 @@ func activityMessageStyle(kind activityKind) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	case activityKindDone:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("120"))
+	case activityKindPlan:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
+	case activityKindStep:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 	default:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
 	}

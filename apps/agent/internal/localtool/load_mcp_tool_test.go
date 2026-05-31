@@ -70,6 +70,9 @@ func TestLoadMCPToolUnknown(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() expected error")
 	}
+	if !strings.Contains(err.Error(), "unknown MCP tool") {
+		t.Fatalf("error message = %q, want unknown tool message", err.Error())
+	}
 }
 
 type fakeMCPToolLoader struct {
@@ -91,6 +94,10 @@ func (t fakeTool) Definition() tool.Definition {
 		Description: "fake tool",
 		InputSchema: tool.EmptyInputSchema(),
 	}
+}
+
+func (t fakeTool) Metadata() tool.Metadata {
+	return tool.NewReadOnlyMetadata(true, tool.DefaultMaxResultChars)
 }
 
 func (t fakeTool) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {

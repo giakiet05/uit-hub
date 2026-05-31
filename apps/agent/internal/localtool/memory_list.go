@@ -11,20 +11,22 @@ import (
 
 // MemoryList lists saved memory index entries.
 type MemoryList struct {
+	tool.BaseTool
 	store memory.Store
 }
 
 // NewMemoryList creates a memory listing tool.
 func NewMemoryList(store memory.Store) *MemoryList {
-	return &MemoryList{store: store}
-}
-
-// Definition describes the memory_list tool schema.
-func (t *MemoryList) Definition() tool.Definition {
-	return tool.Definition{
-		Name:        "memory_list",
-		Description: "List saved long-term memories by id, type, name, and description.",
-		InputSchema: tool.EmptyInputSchema(),
+	return &MemoryList{
+		BaseTool: tool.NewBaseTool(
+			tool.Definition{
+				Name:        "memory_list",
+				Description: "List saved long-term memories by id, type, name, and description.",
+				InputSchema: tool.EmptyInputSchema(),
+			},
+			tool.NewReadOnlyMetadata(false, tool.DefaultMaxResultChars),
+		),
+		store: store,
 	}
 }
 

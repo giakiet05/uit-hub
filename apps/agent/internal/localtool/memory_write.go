@@ -11,32 +11,34 @@ import (
 
 // MemoryWrite creates or updates long-term memory.
 type MemoryWrite struct {
+	tool.BaseTool
 	store memory.Store
 }
 
 // NewMemoryWrite creates a memory writing tool.
 func NewMemoryWrite(store memory.Store) *MemoryWrite {
-	return &MemoryWrite{store: store}
-}
-
-// Definition describes the memory_write tool schema.
-func (t *MemoryWrite) Definition() tool.Definition {
-	return tool.Definition{
-		Name:        "memory_write",
-		Description: "Create or update durable long-term memory only for stable user preferences, durable feedback, project context, or references. Do not save transient task data, student records, grades, or backend-source data.",
-		InputSchema: tool.ObjectSchema(
-			map[string]any{
-				"id":          tool.StringProperty("Existing memory ID to update, or empty to create a new memory."),
-				"type":        tool.StringEnumProperty("Memory type.", "user", "feedback", "project", "reference"),
-				"name":        tool.StringProperty("Short human-readable memory name."),
-				"description": tool.StringProperty("One-line relevance description for future recall."),
-				"content":     tool.StringProperty("Full memory content in Markdown."),
+	return &MemoryWrite{
+		BaseTool: tool.NewBaseTool(
+			tool.Definition{
+				Name:        "memory_write",
+				Description: "Create or update durable long-term memory only for stable user preferences, durable feedback, project context, or references. Do not save transient task data, student records, grades, or backend-source data.",
+				InputSchema: tool.ObjectSchema(
+					map[string]any{
+						"id":          tool.StringProperty("Existing memory ID to update, or empty to create a new memory."),
+						"type":        tool.StringEnumProperty("Memory type.", "user", "feedback", "project", "reference"),
+						"name":        tool.StringProperty("Short human-readable memory name."),
+						"description": tool.StringProperty("One-line relevance description for future recall."),
+						"content":     tool.StringProperty("Full memory content in Markdown."),
+					},
+					"type",
+					"name",
+					"description",
+					"content",
+				),
 			},
-			"type",
-			"name",
-			"description",
-			"content",
+			tool.NewWriteMetadata(false, false, tool.DefaultMaxResultChars),
 		),
+		store: store,
 	}
 }
 

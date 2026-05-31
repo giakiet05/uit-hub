@@ -4,9 +4,11 @@ package config
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/joho/godotenv"
 )
@@ -23,8 +25,10 @@ type Config struct {
 
 // AgentConfig contains agent loop limits.
 type AgentConfig struct {
-	MaxRounds   int
-	ToolTimeout time.Duration
+	Type        agent.Type
+	MaxRounds       int
+	ToolTimeout     time.Duration
+	ConcurrentTools bool
 }
 
 // MemoryConfig contains long-term memory settings.
@@ -44,8 +48,17 @@ type OpenAIConfig struct {
 	BaseURL string
 }
 
-// LoadEnv loads local environment variables from a .env file when present.
+// LoadEnv loads local environment variables from the nearest known agent .env file when present.
 func LoadEnv() error {
+	candidates := []string{
+		".env",
+		filepath.Join("apps", "agent", ".env"),
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return godotenv.Load(candidate)
+		}
+	}
 	return godotenv.Load()
 }
 
@@ -59,8 +72,10 @@ func Load() (Config, error) {
 	cfg := Config{
 		Provider: envProviderOrDefault("LLM_PROVIDER", llm.ProviderTypeOpenAI),
 		Agent: AgentConfig{
-			MaxRounds:   envIntOrDefault("AGENT_MAX_ROUNDS", 0),
-			ToolTimeout: envDurationOrDefault("AGENT_TOOL_TIMEOUT", 15*time.Second),
+			Type:        agent.Type(envOrDefault("AGENT_TYPE", agent.TypeReAct.String())),
+			MaxRounds:       envIntOrDefault("AGENT_MAX_ROUNDS", 0),
+			ToolTimeout:     envDurationOrDefault("AGENT_TOOL_TIMEOUT", 15*time.Second),
+			ConcurrentTools: envBoolOrDefault("AGENT_CONCURRENT_TOOLS", true),
 		},
 		Memory: MemoryConfig{
 			Path: envOrDefault("MEMORY_PATH", "memory"),

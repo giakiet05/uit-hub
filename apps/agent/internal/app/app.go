@@ -6,17 +6,38 @@ import (
 	"io"
 	"strings"
 
-	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/memory"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/runtime"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/storage"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tui"
 )
 
 // Run starts the agent application in TUI mode.
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+	var resume bool
+	var resumeID string
+	if len(args) > 0 && args[0] == "resume" {
+		resume = true
+		args = args[1:]
+		if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+			resumeID = args[0]
+			args = args[1:]
+		} else {
+			// They want to resume but didn't provide an ID, open picker.
+			db, err := storage.InitDB("agent.db")
+			if err == nil {
+				sessions, err := db.ListSessions(10) // show up to 10 recent
+				if err == nil && len(sessions) > 0 {
+					resumeID = selectSessionTUI(sessions)
+					if resumeID == "" {
+						// User canceled picker
+						return nil
+					}
+				}
+			}
+		}
+	}
+
 	logBuffer := tui.NewLogBuffer(500)
 	initialPrompt := strings.TrimSpace(strings.Join(args, " "))
 
@@ -36,6 +57,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	logger.DebugContext(
 		ctx,
 		"Agent config loaded",
+		"agent_type", cfg.Agent.Type,
 		"llm_provider", cfg.Provider,
 		"openai_model", cfg.OpenAI.Model,
 		"openai_base_url", cfg.OpenAI.BaseURL,
@@ -48,39 +70,13 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	)
 	logger.DebugContext(ctx, "Starting agent app", "llm_provider", cfg.Provider)
 
-	provider, err := newProvider(cfg, logger)
+	runtime, err := NewRuntime(ctx, cfg, logger, resume, resumeID)
 	if err != nil {
 		return err
 	}
+	defer runtime.Close(ctx)
 
-	session := runtime.NewSession()
-	memoryStore := newMemoryStore(cfg)
-	memoryContext := memory.Context{}
-
-	memoryContext, err = memory.NewLoader(memoryStore).Load(ctx)
-	if err != nil {
-		logger.DebugContext(ctx, "Memory context load failed", "error", err)
-		return err
-	}
-	tools, mcpManager, closers, err := newToolSet(ctx, cfg, logger, memoryStore)
-	if err != nil {
-		logger.DebugContext(ctx, "Tool registry initialization failed", "error", err)
-		return err
-	}
-	defer closeAll(ctx, logger, closers)
-	logger.DebugContext(ctx, "Tool registry initialized", "tool_count", len(tools.Definitions()))
-	promptBuilder := prompt.NewBuilder(newSessionPrompt(memoryContext, mcpManager.Catalog()))
-
-	runtimeAgent := agent.NewReActAgent(
-		provider,
-		agent.WithPromptBuilder(promptBuilder),
-		agent.WithTools(tools),
-		agent.WithLogger(logger),
-		agent.WithMaxRounds(cfg.Agent.MaxRounds),
-		agent.WithToolTimeout(cfg.Agent.ToolTimeout),
-	)
-
-	runner := tui.NewRunner(session, runtimeAgent, stdin, stdout, logBuffer, initialPrompt)
+	runner := tui.NewRunner(runtime.Session, stdin, stdout, logBuffer, initialPrompt)
 	if err := runner.Run(ctx); err != nil {
 		logger.DebugContext(ctx, "Agent TUI stopped with error", "error", err)
 		return err

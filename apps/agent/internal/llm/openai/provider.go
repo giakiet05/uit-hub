@@ -12,6 +12,7 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 	openaisdk "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/responses"
@@ -82,7 +83,7 @@ func (p *Provider) Generate(ctx context.Context, request llm.GenerateRequest) (l
 
 	return llm.GenerateResponse{
 		Message: message,
-		Usage: llm.Usage{
+		Usage: usage.TokenUsage{
 			InputTokens:  int(response.Usage.InputTokens),
 			OutputTokens: int(response.Usage.OutputTokens),
 		},
@@ -129,7 +130,7 @@ func (p *Provider) Stream(ctx context.Context, request llm.GenerateRequest) <-ch
 				emitStreamEvent(ctx, events, llm.StreamCompletedEvent{
 					Response: llm.GenerateResponse{
 						Message: message,
-						Usage: llm.Usage{
+						Usage: usage.TokenUsage{
 							InputTokens:  int(response.Usage.InputTokens),
 							OutputTokens: int(response.Usage.OutputTokens),
 						},
