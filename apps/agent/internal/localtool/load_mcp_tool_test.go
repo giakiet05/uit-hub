@@ -97,7 +97,7 @@ func (t fakeTool) Definition() tool.Definition {
 }
 
 func (t fakeTool) Metadata() tool.Metadata {
-	return tool.NewReadOnlyMetadata(true, tool.DefaultMaxResultChars)
+	return tool.NewReadOnlyMetadata(true)
 }
 
 func (t fakeTool) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {

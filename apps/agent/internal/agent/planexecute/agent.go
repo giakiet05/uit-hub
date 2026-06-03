@@ -19,7 +19,7 @@ const (
 // agent. The runtime owns orchestration: every step result returns to this agent
 // before the next module is called.
 type PlanAndExecuteAgent struct {
-	provider      llm.Provider
+	model         llm.Model
 	maxSteps      int
 	maxStepRounds int
 	maxReplans    int
@@ -29,10 +29,9 @@ type PlanAndExecuteAgent struct {
 // PlanAndExecuteOption configures optional PlanAndExecuteAgent settings.
 type PlanAndExecuteOption func(*PlanAndExecuteAgent)
 
-// NewPlanAndExecuteAgent constructs a single-agent plan-and-execute agent.
-func NewPlanAndExecuteAgent(provider llm.Provider, opts ...PlanAndExecuteOption) *PlanAndExecuteAgent {
+func NewPlanAndExecuteAgent(model llm.Model, opts ...PlanAndExecuteOption) *PlanAndExecuteAgent {
 	agent := &PlanAndExecuteAgent{
-		provider:      provider,
+		model:         model,
 		maxSteps:      defaultMaxPlanSteps,
 		maxStepRounds: defaultMaxStepRounds,
 		maxReplans:    defaultMaxReplans,

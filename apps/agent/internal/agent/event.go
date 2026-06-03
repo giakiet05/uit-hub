@@ -35,10 +35,18 @@ type RunStartedEvent struct {
 
 // RoundStartedEvent is emitted before one model/tool round begins.
 type RoundStartedEvent struct {
-	SessionID    string
-	Round        int
-	MessageCount int
-	ToolCount    int
+	SessionID            string
+	Round                int
+	MessageCount         int
+	ToolCount            int
+	CurrentContextTokens int
+	MaxContextTokens     int
+}
+
+// CompactionTriggeredEvent is emitted when the conversation history is truncated.
+type CompactionTriggeredEvent struct {
+	SessionID string
+	Info      string
 }
 
 // ModelCallStartedEvent is emitted immediately before calling the LLM provider.
@@ -175,6 +183,9 @@ func (RunStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (RoundStartedEvent) isAgentEvent()         {}
 func (RoundStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
+
+func (CompactionTriggeredEvent) isAgentEvent()         {}
+func (CompactionTriggeredEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
 func (ModelCallStartedEvent) isAgentEvent()         {}
 func (ModelCallStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }

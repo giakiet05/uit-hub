@@ -547,7 +547,7 @@ func (t errorTool) Definition() tool.Definition {
 }
 
 func (t errorTool) Metadata() tool.Metadata {
-	return tool.NewReadOnlyMetadata(true, tool.DefaultMaxResultChars)
+	return tool.NewReadOnlyMetadata(true)
 }
 
 func (t errorTool) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {
@@ -565,7 +565,7 @@ func (t blockingTool) Definition() tool.Definition {
 }
 
 func (t blockingTool) Metadata() tool.Metadata {
-	return tool.NewReadOnlyMetadata(true, tool.DefaultMaxResultChars)
+	return tool.NewReadOnlyMetadata(true)
 }
 
 func (t blockingTool) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {

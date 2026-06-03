@@ -24,7 +24,7 @@ func NewMemoryList(store memory.Store) *MemoryList {
 				Description: "List saved long-term memories by id, type, name, and description.",
 				InputSchema: tool.EmptyInputSchema(),
 			},
-			tool.NewReadOnlyMetadata(false, tool.DefaultMaxResultChars),
+			tool.NewReadOnlyMetadata(false),
 		),
 		store: store,
 	}

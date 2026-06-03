@@ -1,17 +1,21 @@
 package localtool
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
+)
 
 // stringArg reads a required string argument from a tool call.
 func stringArg(arguments map[string]any, name string) (string, error) {
 	value, exists := arguments[name]
 	if !exists {
-		return "", fmt.Errorf("missing argument %q", name)
+		return "", tool.ToolError{Type: tool.ErrorTypeValidation, Err: fmt.Errorf("missing argument %q", name)}
 	}
 
 	text, ok := value.(string)
 	if !ok {
-		return "", fmt.Errorf("argument %q must be a string", name)
+		return "", tool.ToolError{Type: tool.ErrorTypeValidation, Err: fmt.Errorf("argument %q must be a string", name)}
 	}
 	return text, nil
 }
@@ -25,7 +29,7 @@ func optionalStringArg(arguments map[string]any, name string) (string, error) {
 
 	text, ok := value.(string)
 	if !ok {
-		return "", fmt.Errorf("argument %q must be a string", name)
+		return "", tool.ToolError{Type: tool.ErrorTypeValidation, Err: fmt.Errorf("argument %q must be a string", name)}
 	}
 	return text, nil
 }
@@ -34,7 +38,7 @@ func optionalStringArg(arguments map[string]any, name string) (string, error) {
 func numberArg(arguments map[string]any, name string) (float64, error) {
 	value, exists := arguments[name]
 	if !exists {
-		return 0, fmt.Errorf("missing argument %q", name)
+		return 0, tool.ToolError{Type: tool.ErrorTypeValidation, Err: fmt.Errorf("missing argument %q", name)}
 	}
 
 	switch number := value.(type) {
@@ -47,6 +51,6 @@ func numberArg(arguments map[string]any, name string) (float64, error) {
 	case int64:
 		return float64(number), nil
 	default:
-		return 0, fmt.Errorf("argument %q must be a number", name)
+		return 0, tool.ToolError{Type: tool.ErrorTypeValidation, Err: fmt.Errorf("argument %q must be a number", name)}
 	}
 }

@@ -36,7 +36,7 @@ func NewMemoryWrite(store memory.Store) *MemoryWrite {
 					"content",
 				),
 			},
-			tool.NewWriteMetadata(false, false, tool.DefaultMaxResultChars),
+			tool.NewWriteMetadata(false, false),
 		),
 		store: store,
 	}

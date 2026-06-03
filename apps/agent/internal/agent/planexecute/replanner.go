@@ -17,7 +17,7 @@ func (a *PlanAndExecuteAgent) replan(
 	state executionState,
 	stats *agent.RunStats,
 ) (executionPlan, error) {
-	messages := input.BuildMessages(nil, []conversation.Message{
+	messages := input.PromptSnapshot.BuildMessages(nil, []conversation.Message{
 		conversation.NewUserMessage(replannerPrompt(input.UserPrompt, plan, results, state)),
 	})
 	response, err := a.callModel(ctx, events, input.SessionID, stats.Rounds, messages, nil, stats)

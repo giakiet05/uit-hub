@@ -32,7 +32,7 @@ func NewWriteFile(rootDir string) *WriteFile {
 					"content",
 				),
 			},
-			tool.NewWriteMetadata(false, true, tool.DefaultMaxResultChars),
+			tool.NewWriteMetadata(false, true),
 		),
 		rootDir: rootDir,
 	}
@@ -47,22 +47,28 @@ func (t *WriteFile) Execute(ctx context.Context, call tool.Call) (tool.Result, e
 
 	relativePath, err := stringArg(call.Arguments, "path")
 	if err != nil {
-		return tool.Result{}, err
+		return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: err}
 	}
 	content, err := stringArg(call.Arguments, "content")
 	if err != nil {
-		return tool.Result{}, err
+		return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: err}
 	}
 
 	fullPath, err := safeSandboxPath(t.rootDir, relativePath)
 	if err != nil {
-		return tool.Result{}, err
+		return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: fmt.Errorf("invalid path %q: %v", relativePath, err)}
 	}
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-		return tool.Result{}, fmt.Errorf("create parent directory: %w", err)
+		if os.IsPermission(err) {
+			return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: fmt.Errorf("permission denied creating directory for %q", relativePath)}
+		}
+		return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: fmt.Errorf("could not create parent directory for %q", relativePath)}
 	}
 	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
-		return tool.Result{}, fmt.Errorf("write file: %w", err)
+		if os.IsPermission(err) {
+			return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: fmt.Errorf("permission denied writing to %q", relativePath)}
+		}
+		return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: fmt.Errorf("could not write file %q", relativePath)}
 	}
 
 	output, err := json.Marshal(map[string]any{

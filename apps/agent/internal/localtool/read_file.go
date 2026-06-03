@@ -29,7 +29,7 @@ func NewReadFile(rootDir string) *ReadFile {
 					"path",
 				),
 			},
-			tool.NewReadOnlyMetadata(false, tool.DefaultMaxResultChars),
+			tool.NewReadOnlyMetadata(false),
 		),
 		rootDir: rootDir,
 	}
@@ -44,16 +44,22 @@ func (t *ReadFile) Execute(ctx context.Context, call tool.Call) (tool.Result, er
 
 	relativePath, err := stringArg(call.Arguments, "path")
 	if err != nil {
-		return tool.Result{}, err
+		return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: err}
 	}
 
 	fullPath, err := safeSandboxPath(t.rootDir, relativePath)
 	if err != nil {
-		return tool.Result{}, err
+		return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: fmt.Errorf("invalid path %q: %v", relativePath, err)}
 	}
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
-		return tool.Result{}, fmt.Errorf("read file: %w", err)
+		if os.IsNotExist(err) {
+			return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: fmt.Errorf("file %q does not exist", relativePath)}
+		}
+		if os.IsPermission(err) {
+			return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: fmt.Errorf("permission denied reading %q", relativePath)}
+		}
+		return tool.Result{}, tool.ToolError{Type: tool.ErrorTypeValidation, Name: call.Name, Err: fmt.Errorf("could not read file %q", relativePath)}
 	}
 
 	output, err := json.Marshal(map[string]any{

@@ -49,7 +49,7 @@ func (t *LoadMCPTool) Definition() tool.Definition {
 
 // Metadata returns the tool metadata.
 func (t *LoadMCPTool) Metadata() tool.Metadata {
-	return tool.NewWriteMetadata(false, false, tool.DefaultMaxResultChars)
+	return tool.NewWriteMetadata(false, false)
 }
 
 // Execute loads one MCP tool into the runtime registry.

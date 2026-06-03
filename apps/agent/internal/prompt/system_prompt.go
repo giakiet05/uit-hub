@@ -1,6 +1,10 @@
 package prompt
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
+)
 
 const (
 	dynamicContextHeader  = "=== DYNAMIC CONTEXT ==="
@@ -16,34 +20,49 @@ type DynamicPart string
 // UncachedPart is volatile prompt text built for one LLM call.
 type UncachedPart string
 
-// SessionPrompt contains prompt parts stable for one runtime session.
-type SessionPrompt struct {
+// SystemPrompt contains prompt parts stable for one runtime session.
+type SystemPrompt struct {
 	StaticParts  []StaticPart
 	DynamicParts []DynamicPart
 }
 
-// CallPrompt contains one LLM-call prompt: session-stable prompt plus volatile
-// per-call context.
-type CallPrompt struct {
-	Session       SessionPrompt
-	UncachedParts []UncachedPart
-}
-
-// Render converts one call prompt into the final system prompt text.
-func (p CallPrompt) Render() string {
+// Render converts the prompt into the final system prompt text.
+func (p SystemPrompt) Render(uncached []UncachedPart) string {
 	parts := make([]string, 0, 3)
 
-	if text := renderStaticParts(p.Session.StaticParts); text != "" {
+	if text := renderStaticParts(p.StaticParts); text != "" {
 		parts = append(parts, text)
 	}
-	if text := renderDynamicParts(p.Session.DynamicParts); text != "" {
+	if text := renderDynamicParts(p.DynamicParts); text != "" {
 		parts = append(parts, dynamicContextHeader+"\n\n"+text)
 	}
-	if text := renderUncachedParts(p.UncachedParts); text != "" {
+	if text := renderUncachedParts(uncached); text != "" {
 		parts = append(parts, uncachedContextHeader+"\n\n"+text)
 	}
 
 	return strings.Join(parts, "\n\n")
+}
+
+// BuildMessages creates the system message and prepends it to the history array.
+func (p SystemPrompt) BuildMessages(uncached []UncachedPart, history []conversation.Message) []conversation.Message {
+	systemText := p.Render(uncached)
+
+	messages := make([]conversation.Message, 0, len(history)+1)
+	if systemText != "" {
+		messages = append(messages, conversation.NewSystemMessage(systemText))
+	}
+	messages = append(messages, history...)
+	return messages
+}
+
+// EstimateTokens calculates the token size of the stable system prompt parts.
+func (p SystemPrompt) EstimateTokens() int {
+	text := p.Render(nil)
+	if text == "" {
+		return 0
+	}
+	msg := conversation.NewSystemMessage(text)
+	return conversation.EstimateTokens([]conversation.Message{msg})
 }
 
 // renderStaticParts joins static prompt parts while skipping empty parts.

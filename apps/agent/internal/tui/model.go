@@ -40,6 +40,8 @@ type model struct {
 	conversation     []conversationItem
 	conversationView viewport.Model
 	lastRunUsage     usage.TokenUsage
+	currentContext   int
+	maxContext       int
 	logLines         []string
 	logView          viewport.Model
 	err              error
@@ -74,6 +76,7 @@ const (
 	activityKindDone     activityKind = "done"
 	activityKindPlan     activityKind = "plan"
 	activityKindStep     activityKind = "step"
+	activityKindSystem   activityKind = "system"
 )
 
 // agentEventMsg carries one streamed agent event back into the TUI update loop.
@@ -316,8 +319,12 @@ func (m model) handleAgentEvent(event agent.Event) model {
 	switch typed := event.(type) {
 	case agent.RoundStartedEvent:
 		m.status = fmt.Sprintf("round %d", typed.Round)
+		m.currentContext = typed.CurrentContextTokens
+		m.maxContext = typed.MaxContextTokens
 		m.streamingIndex = -1
 		m.appendActivity(activityKindRound, fmt.Sprintf("round %d", typed.Round))
+	case agent.CompactionTriggeredEvent:
+		m.appendActivity(activityKindSystem, fmt.Sprintf("compaction:\n%s", typed.Info))
 	case agent.ModelCallStartedEvent:
 		m.status = "thinking"
 		m.appendActivity(activityKindThinking, "thinking")
@@ -599,12 +606,20 @@ func (m *model) resizeViewports() {
 
 func (m model) renderUsageLine() string {
 	sessionUsage := m.session.State().GetUsage()
+	contextPercent := 0
+	if m.maxContext > 0 {
+		contextPercent = (m.currentContext * 100) / m.maxContext
+	}
+
 	content := fmt.Sprintf(
-		"last i/o %d/%d | session i/o %d/%d",
+		"last i/o %d/%d | session i/o %d/%d | context %d/%d (%d%%)",
 		m.lastRunUsage.InputTokens,
 		m.lastRunUsage.OutputTokens,
 		sessionUsage.InputTokens,
 		sessionUsage.OutputTokens,
+		m.currentContext,
+		m.maxContext,
+		contextPercent,
 	)
 	width := m.conversationView.Width - usageLineStyle.GetHorizontalFrameSize()
 	if width < 1 {
@@ -841,6 +856,8 @@ func activityMessageStyle(kind activityKind) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
 	case activityKindStep:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	case activityKindSystem:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	default:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
 	}

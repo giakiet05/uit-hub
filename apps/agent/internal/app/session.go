@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/memory"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
 // newSessionState creates one chat session with stable memory, prompt, and tool
@@ -25,7 +27,15 @@ func newSessionState(ctx context.Context, state *State, sessionOpts ...session.O
 	opts := append([]session.Option{
 		session.WithPromptSnapshot(promptSnapshot),
 		session.WithTools(tools),
+		session.WithResultBudgeter(newResultBudgeter(state.Config)),
 		session.WithConcurrentTools(state.Config.Agent.ConcurrentTools),
 	}, sessionOpts...)
 	return session.NewState(opts...), nil
+}
+
+func newResultBudgeter(cfg config.Config) *tool.ResultBudgeter {
+	if !cfg.Compaction.ToolResultBudgetEnabled {
+		return nil
+	}
+	return tool.NewResultBudgeter(cfg.Compaction.ToolResultBudgetMaxChars)
 }

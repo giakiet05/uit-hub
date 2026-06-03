@@ -17,6 +17,11 @@ func (c *Conversation) Append(message Message) {
 	c.messages = append(c.messages, message)
 }
 
+// SetMessages overwrites the entire message history (used by Compaction).
+func (c *Conversation) SetMessages(messages []Message) {
+	c.messages = messages
+}
+
 // Messages returns a defensive copy of the message history.
 func (c *Conversation) Messages() []Message {
 	messages := make([]Message, len(c.messages))

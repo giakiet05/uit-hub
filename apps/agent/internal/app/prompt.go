@@ -7,8 +7,8 @@ import (
 )
 
 // newSessionPrompt builds one session-stable prompt snapshot for the agent.
-func newSessionPrompt(memoryContext memory.Context, mcpCatalog []mcpadapter.ToolMetadata) prompt.SessionPrompt {
-	return prompt.SessionPrompt{
+func newSessionPrompt(memoryContext memory.Context, mcpCatalog []mcpadapter.ToolMetadata) prompt.SystemPrompt {
+	return prompt.SystemPrompt{
 		StaticParts: []prompt.StaticPart{
 			prompt.IdentityStaticPrompt(),
 			prompt.BehaviorStaticPrompt(),

@@ -34,7 +34,7 @@ func RunToolBatch(
 	}
 
 	batches := partitionToolCalls(calls, input.Tools)
-	executor := tool.NewExecutor(input.Tools, timeout)
+	executor := tool.NewExecutor(input.Tools, timeout, input.ResultBudgeter)
 	var finalResults []tool.Result
 
 	for _, b := range batches {
@@ -126,14 +126,14 @@ func runParallelBatch(
 		wg.Add(1)
 		go func(i int, call conversation.ToolCall) {
 			defer wg.Done()
-			
+
 			// We check if another concurrent execution already failed context (e.g. timeout/cancel).
 			if ctx.Err() != nil {
 				return
 			}
-			
+
 			result, isErr, ok := executeOneTool(ctx, agentType, events, input, round, call, timeout, executor)
-			
+
 			mu.Lock()
 			if !ok {
 				okFlag = false

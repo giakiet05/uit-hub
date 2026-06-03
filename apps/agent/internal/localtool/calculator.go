@@ -37,7 +37,7 @@ func NewCalculator() *Calculator {
 					"b",
 				),
 			},
-			tool.NewReadOnlyMetadata(true, tool.DefaultMaxResultChars),
+			tool.NewReadOnlyMetadata(true),
 		),
 	}
 }

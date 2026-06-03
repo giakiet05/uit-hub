@@ -16,7 +16,7 @@ func (a *PlanAndExecuteAgent) executeStep(
 	state executionState,
 	stats *agent.RunStats,
 ) (stepResult, error) {
-	stepMessages := input.BuildMessages(nil, []conversation.Message{
+	stepMessages := input.PromptSnapshot.BuildMessages(nil, []conversation.Message{
 		conversation.NewUserMessage(executorPrompt(input.UserPrompt, step, state)),
 	})
 	toolCalls := []string{}

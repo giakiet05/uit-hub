@@ -24,7 +24,7 @@ func (a *PlanAndExecuteAgent) callModel(
 	}
 	startedAt := time.Now()
 	stats.LLMCalls++
-	response, textStreamed, err := agent.GenerateWithStream(ctx, a.provider, llm.GenerateRequest{
+	response, textStreamed, err := agent.GenerateWithStream(ctx, a.model, llm.GenerateRequest{
 		SessionID: sessionID,
 		Messages:  messages,
 		Tools:     tools,

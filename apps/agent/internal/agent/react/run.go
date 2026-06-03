@@ -48,16 +48,40 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 
 	input.Conversation.Append(conversation.NewUserMessage(input.UserPrompt))
 
+	sysTokens := input.PromptSnapshot.EstimateTokens()
+
 	for round := 1; round <= runState.MaxRounds; round++ {
 		runState.Round = round
 		stats.Rounds = round
-		messages := input.BuildAgentMessages(nil)
+
+		maxTokens := 0
+		if a.model != nil {
+			maxTokens = a.model.MaxContextTokens()
+		}
+
+		// Compact context if it exceeds thresholds
+		maxHistoryTokens := maxTokens - sysTokens
+		compacted, info := conversation.CompactContext(input.Conversation.Messages(), maxHistoryTokens, a.compaction)
+		input.Conversation.SetMessages(compacted)
+		if info != "" {
+			if !agent.Emit(ctx, events, agent.CompactionTriggeredEvent{
+				SessionID: input.SessionID,
+				Info:      info,
+			}) {
+				return
+			}
+		}
+
+		messages := input.PromptSnapshot.BuildMessages(nil, input.Conversation.Messages())
+		currentTokens := conversation.EstimateTokens(messages)
 		tools := input.ToolDefinitions()
 		if !agent.Emit(ctx, events, agent.RoundStartedEvent{
-			SessionID:    input.SessionID,
-			Round:        round,
-			MessageCount: len(messages),
-			ToolCount:    len(tools),
+			SessionID:            input.SessionID,
+			Round:                round,
+			MessageCount:         len(messages),
+			ToolCount:            len(tools),
+			CurrentContextTokens: currentTokens,
+			MaxContextTokens:     maxTokens,
 		}) {
 			return
 		}
@@ -67,7 +91,7 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 		}
 		llmStartedAt := time.Now()
 		stats.LLMCalls++
-		response, textStreamed, err := agent.GenerateWithStream(ctx, a.provider, llm.GenerateRequest{
+		response, textStreamed, err := agent.GenerateWithStream(ctx, a.model, llm.GenerateRequest{
 			SessionID: input.SessionID,
 			Messages:  messages,
 			Tools:     tools,
@@ -110,12 +134,10 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 			return
 		}
 
-
 		if ok := a.executeToolCalls(ctx, events, input, round, toolCalls, stats); !ok {
 			return
 		}
 	}
-
 
 	complete(agent.TerminalMaxRounds)
 }
