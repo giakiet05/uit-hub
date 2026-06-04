@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
@@ -13,11 +14,12 @@ import (
 
 // SessionRecord is the GORM model for storing a session.
 type SessionRecord struct {
-	ID        string    `gorm:"primaryKey"`
-	StartedAt time.Time
-	UpdatedAt time.Time
-	Messages  string    // JSON encoded []conversation.Message
-	Usage     string    // JSON encoded session.Usage
+	ID           string `gorm:"primaryKey"`
+	StartedAt    time.Time
+	UpdatedAt    time.Time
+	Messages     string // JSON encoded []conversation.Message
+	Usage        string // JSON encoded session.Usage
+	RuntimeTools string // JSON encoded []string
 }
 
 // TableName overrides the table name used by SessionRecord to `sessions`.
@@ -56,12 +58,15 @@ type messageEnvelope struct {
 func marshalMessages(messages []conversation.Message) ([]byte, error) {
 	envelopes := make([]messageEnvelope, 0, len(messages))
 	for _, msg := range messages {
-		role := string(conversation.RoleOf(msg))
+		role := conversation.RoleOf(msg)
+		if role == conversation.RoleSystem {
+			continue
+		}
 		data, err := json.Marshal(msg)
 		if err != nil {
 			return nil, err
 		}
-		envelopes = append(envelopes, messageEnvelope{Role: role, Data: data})
+		envelopes = append(envelopes, messageEnvelope{Role: string(role), Data: data})
 	}
 	return json.Marshal(envelopes)
 }
@@ -103,8 +108,13 @@ func unmarshalMessages(raw string) ([]conversation.Message, error) {
 	return messages, nil
 }
 
+// Save persists a session snapshot.
+func (db *DB) Save(ctx context.Context, snapshot session.Snapshot) error {
+	return db.UpsertSession(ctx, snapshot.ID, snapshot.StartedAt, snapshot.Messages, snapshot.Usage, snapshot.RuntimeToolNames)
+}
+
 // UpsertSession saves or updates a session's history and usage metrics.
-func (db *DB) UpsertSession(id string, startedAt time.Time, messages []conversation.Message, usage session.Usage) error {
+func (db *DB) UpsertSession(ctx context.Context, id string, startedAt time.Time, messages []conversation.Message, usage session.Usage, runtimeToolNames []string) error {
 	messagesJSON, err := marshalMessages(messages)
 	if err != nil {
 		return err
@@ -115,15 +125,21 @@ func (db *DB) UpsertSession(id string, startedAt time.Time, messages []conversat
 		return err
 	}
 
+	runtimeToolsJSON, err := json.Marshal(runtimeToolNames)
+	if err != nil {
+		return err
+	}
+
 	record := SessionRecord{
-		ID:        id,
-		StartedAt: startedAt,
-		Messages:  string(messagesJSON),
-		Usage:     string(usageJSON),
+		ID:           id,
+		StartedAt:    startedAt,
+		Messages:     string(messagesJSON),
+		Usage:        string(usageJSON),
+		RuntimeTools: string(runtimeToolsJSON),
 	}
 
 	// Save will update if primary key exists, or insert if it doesn't.
-	return db.gormDB.Save(&record).Error
+	return db.gormDB.WithContext(ctx).Save(&record).Error
 }
 
 // GetSession retrieves a session by its ID.
@@ -157,18 +173,25 @@ func (db *DB) ListSessions(limit int) ([]SessionRecord, error) {
 }
 
 // Decode converts a SessionRecord back into domain models.
-func (r *SessionRecord) Decode() ([]conversation.Message, session.Usage, error) {
+func (r *SessionRecord) Decode() ([]conversation.Message, session.Usage, []string, error) {
 	messages, err := unmarshalMessages(r.Messages)
 	if err != nil {
-		return nil, session.Usage{}, err
+		return nil, session.Usage{}, nil, err
 	}
 
 	var usage session.Usage
 	if r.Usage != "" {
 		if err := json.Unmarshal([]byte(r.Usage), &usage); err != nil {
-			return nil, session.Usage{}, err
+			return nil, session.Usage{}, nil, err
 		}
 	}
 
-	return messages, usage, nil
+	var runtimeToolNames []string
+	if r.RuntimeTools != "" {
+		if err := json.Unmarshal([]byte(r.RuntimeTools), &runtimeToolNames); err != nil {
+			return nil, session.Usage{}, nil, err
+		}
+	}
+
+	return messages, usage, runtimeToolNames, nil
 }

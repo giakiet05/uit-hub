@@ -79,3 +79,12 @@ func (s *ToolSet) MarkUsed(name string) {
 	}
 	s.runtime.MarkAccessed(name)
 }
+
+// RuntimeToolNames returns the runtime-discovered tool names currently visible
+// to the model.
+func (s *ToolSet) RuntimeToolNames() []string {
+	if s == nil {
+		return nil
+	}
+	return s.runtime.Names()
+}

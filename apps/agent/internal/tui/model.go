@@ -26,28 +26,28 @@ const (
 )
 
 type model struct {
-	ctx              context.Context
-	session          *session.Session
-	logs             *LogBuffer
-	width            int
-	height           int
-	input            textinput.Model
-	running          bool
-	status           string
-	streamingIndex   int
-	initialRun       bool
-	mouseEnabled     bool
-	conversation     []conversationItem
-	conversationView viewport.Model
-	lastRunUsage     usage.TokenUsage
-	currentContext   int
-	maxContext       int
-	logLines         []string
-	logView          viewport.Model
-	err              error
+	ctx               context.Context
+	session           *session.Session
+	logs              *LogBuffer
+	width             int
+	height            int
+	input             textinput.Model
+	running           bool
+	status            string
+	streamingIndex    int
+	initialRun        bool
+	mouseEnabled      bool
+	conversation      []conversationItem
+	conversationView  viewport.Model
+	lastRunUsage      usage.TokenUsage
+	currentContext    int
+	maxContext        int
+	logLines          []string
+	logView           viewport.Model
+	err               error
 	pendingPermission *agent.ToolPermissionRequestEvent
-	bus              *bus.EventBus
-	eventChan        bus.EventChan
+	bus               *bus.EventBus
+	eventChan         bus.EventChan
 }
 
 type conversationRole string
@@ -147,10 +147,14 @@ func buildInitialConversation(session *session.Session) []conversationItem {
 				})
 			}
 		case conversation.ToolResultMessage:
+			observeText := strings.TrimSpace(text)
+			if observeText == "" {
+				observeText = "tool completed"
+			}
 			items = append(items, conversationItem{
 				role:         conversationRoleActivity,
 				activityKind: activityKindObserve,
-				text:         "tool completed",
+				text:         "observe " + typed.ToolCallID + ": " + observeText,
 			})
 		}
 	}
@@ -771,9 +775,9 @@ func runAgent(ctx context.Context, session *session.Session, prompt string, m *m
 	if m.eventChan == nil && m.bus != nil {
 		m.eventChan = m.bus.Subscribe(bus.TopicAll)
 	}
-	
+
 	go session.Run(ctx, prompt)
-	
+
 	if m.eventChan != nil {
 		return waitAgentEvent(m.eventChan)
 	}

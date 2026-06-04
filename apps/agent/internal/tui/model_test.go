@@ -81,15 +81,17 @@ func TestModelRendersAgentActivityEvents(t *testing.T) {
 			},
 		},
 	})
+	runStats := agent.RunStats{
+		TokenUsage: usage.TokenUsage{
+			InputTokens:  12,
+			OutputTokens: 7,
+		},
+	}
+	m.session.State().AddRunStats(runStats)
 	m = m.handleAgentEvent(agent.RunCompletedEvent{
 		SessionID: "session-1",
 		Reason:    agent.TerminalCompleted,
-		Stats: agent.RunStats{
-			TokenUsage: usage.TokenUsage{
-				InputTokens:  12,
-				OutputTokens: 7,
-			},
-		},
+		Stats:     runStats,
 	})
 
 	view := m.View()
@@ -135,5 +137,5 @@ func (fakeAgent) Run(ctx context.Context, input agent.RunInput) <-chan agent.Eve
 }
 
 func newTestSession() *session.Session {
-	return session.NewSession(session.NewState(), fakeAgent{})
+	return session.NewSession(session.NewState(), fakeAgent{}, nil)
 }

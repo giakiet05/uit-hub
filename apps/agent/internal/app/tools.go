@@ -88,6 +88,7 @@ func newSessionToolSet(
 	cfg config.Config,
 	memoryStore memory.Store,
 	mcpManager *mcpadapter.Manager,
+	runtimeToolNames []string,
 ) (*tool.ToolSet, error) {
 	runtimeRegistry := tool.NewRuntimeRegistry(cfg.Tool.RuntimeLimit)
 
@@ -102,6 +103,19 @@ func newSessionToolSet(
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, name := range runtimeToolNames {
+		if mcpManager == nil {
+			continue
+		}
+		restoredTool, exists := mcpManager.LoadTool(name)
+		if !exists {
+			continue
+		}
+		if err := runtimeRegistry.Register(restoredTool); err != nil {
+			return nil, err
+		}
 	}
 
 	return tool.NewToolSet(baseRegistry, runtimeRegistry), nil

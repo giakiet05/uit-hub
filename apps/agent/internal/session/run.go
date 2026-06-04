@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
@@ -9,19 +10,45 @@ import (
 
 // Session owns one chat session and delegates user prompts to an agent service.
 type Session struct {
-	state *State
-	agent agent.Agent
-	bus   *bus.EventBus
+	state  *State
+	agent  agent.Agent
+	bus    *bus.EventBus
+	store  Store
+	logger *slog.Logger
+}
+
+// RuntimeOption configures session runtime dependencies.
+type RuntimeOption func(*Session)
+
+// WithStore sets the persistent session store.
+func WithStore(store Store) RuntimeOption {
+	return func(s *Session) {
+		s.store = store
+	}
+}
+
+// WithLogger sets the session runtime logger.
+func WithLogger(logger *slog.Logger) RuntimeOption {
+	return func(s *Session) {
+		s.logger = logger
+	}
 }
 
 // NewSession creates a session runtime around session state and a stateless
 // agent service.
-func NewSession(state *State, runtimeAgent agent.Agent, bus *bus.EventBus) *Session {
-	return &Session{
+func NewSession(state *State, runtimeAgent agent.Agent, eventBus *bus.EventBus, opts ...RuntimeOption) *Session {
+	session := &Session{
 		state: state,
 		agent: runtimeAgent,
-		bus:   bus,
+		bus:   eventBus,
 	}
+	for _, opt := range opts {
+		opt(session)
+	}
+	if session.logger == nil {
+		session.logger = slog.Default()
+	}
+	return session
 }
 
 // SetAgent dynamically replaces the stateless agent service for this session.
@@ -65,6 +92,30 @@ func (s *Session) Run(ctx context.Context, userPrompt string) {
 	}
 
 	for event := range s.agent.Run(ctx, input) {
+		s.handleRunEvent(ctx, event)
 		s.bus.Publish(event)
 	}
+}
+
+func (s *Session) handleRunEvent(ctx context.Context, event agent.Event) {
+	switch typed := event.(type) {
+	case agent.RunCompletedEvent:
+		s.finishRun(ctx, typed.Stats)
+	case agent.RunFailedEvent:
+		s.finishRun(ctx, typed.Stats)
+	}
+}
+
+func (s *Session) finishRun(ctx context.Context, stats agent.RunStats) {
+	s.state.AddRunStats(stats)
+	if s.store == nil {
+		return
+	}
+
+	snapshot := s.state.Snapshot()
+	if err := s.store.Save(ctx, snapshot); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to save session", "session_id", snapshot.ID, "error", err)
+		return
+	}
+	s.logger.DebugContext(ctx, "Session saved", "session_id", snapshot.ID, "message_count", len(snapshot.Messages))
 }

@@ -102,6 +102,17 @@ func (r *RuntimeRegistry) Definitions() []Definition {
 	return definitions
 }
 
+// Names returns registered runtime tool names in registration order.
+func (r *RuntimeRegistry) Names() []string {
+	if r == nil {
+		return nil
+	}
+
+	names := make([]string, len(r.order))
+	copy(names, r.order)
+	return names
+}
+
 // Unregister removes one runtime tool and its definition.
 func (r *RuntimeRegistry) Unregister(name string) bool {
 	if r == nil {

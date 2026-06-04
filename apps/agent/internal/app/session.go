@@ -11,14 +11,14 @@ import (
 
 // newSessionState creates one chat session with stable memory, prompt, and tool
 // snapshots.
-func newSessionState(ctx context.Context, state *State, sessionOpts ...session.Option) (*session.State, error) {
+func newSessionState(ctx context.Context, state *State, runtimeToolNames []string, sessionOpts ...session.Option) (*session.State, error) {
 	memoryContext, err := memory.NewLoader(state.MemoryStore).Load(ctx)
 	if err != nil {
 		state.Logger.DebugContext(ctx, "Memory context load failed", "error", err)
 		return nil, err
 	}
 
-	tools, err := newSessionToolSet(state.Config, state.MemoryStore, state.MCPManager)
+	tools, err := newSessionToolSet(state.Config, state.MemoryStore, state.MCPManager, runtimeToolNames)
 	if err != nil {
 		return nil, err
 	}
