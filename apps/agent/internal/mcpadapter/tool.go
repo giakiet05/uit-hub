@@ -31,12 +31,12 @@ func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
 					concurrencySafe = true
 				}
 				delete(m, "_concurrencySafe")
-				
+
 				if val, ok := m["_requireApproval"].(bool); ok && val {
 					requireApproval = true
 				}
 				delete(m, "_requireApproval")
-				
+
 				mcpTool.InputSchema = m
 			}
 		}
@@ -54,7 +54,6 @@ func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
 				Destructive:     false,
 				ConcurrencySafe: concurrencySafe,
 				RequireApproval: requireApproval,
-				MaxResultChars:  tool.DefaultMaxResultChars,
 			},
 		),
 		serverName: serverName,

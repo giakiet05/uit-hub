@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 )
 
@@ -14,20 +15,24 @@ const defaultToolTimeout = 15 * time.Second
 // ReActAgent implements the baseline reason-act-observe loop for tool-calling
 // agents.
 type ReActAgent struct {
-	provider    llm.Provider
-	maxRounds   int
-	toolTimeout time.Duration
+	model           llm.Model
+	maxRounds       int
+	toolTimeout     time.Duration
+	compaction      conversation.CompactionOptions
+	contextCollapse ContextCollapseOptions
 }
 
 // ReActOption configures optional ReActAgent dependencies and limits.
 type ReActOption func(*ReActAgent)
 
 // NewReActAgent constructs a ReActAgent with defaults, then applies overrides.
-func NewReActAgent(provider llm.Provider, opts ...ReActOption) *ReActAgent {
+func NewReActAgent(model llm.Model, opts ...ReActOption) *ReActAgent {
 	agent := &ReActAgent{
-		provider:    provider,
-		maxRounds:   defaultMaxToolIterations,
-		toolTimeout: defaultToolTimeout,
+		model:           model,
+		maxRounds:       defaultMaxToolIterations,
+		toolTimeout:     defaultToolTimeout,
+		compaction:      conversation.CompactionOptions{},
+		contextCollapse: ContextCollapseOptions{},
 	}
 
 	for _, opt := range opts {
@@ -54,6 +59,20 @@ func WithToolTimeout(timeout time.Duration) ReActOption {
 		if timeout > 0 {
 			agent.toolTimeout = timeout
 		}
+	}
+}
+
+// WithCompaction configures lightweight conversation compaction.
+func WithCompaction(options conversation.CompactionOptions) ReActOption {
+	return func(agent *ReActAgent) {
+		agent.compaction = options
+	}
+}
+
+// WithContextCollapse configures LLM-backed conversation context collapse.
+func WithContextCollapse(options ContextCollapseOptions) ReActOption {
+	return func(agent *ReActAgent) {
+		agent.contextCollapse = options
 	}
 }
 

@@ -11,16 +11,16 @@ import (
 type Executor struct {
 	tools              *ToolSet
 	timeout            time.Duration
-	budgeter           ResultBudgeter
+	budgeter           *ResultBudgeter
 	loadedMCPToolNames map[string]struct{}
 }
 
 // NewExecutor creates a tool executor for one agent run.
-func NewExecutor(tools *ToolSet, timeout time.Duration) *Executor {
+func NewExecutor(tools *ToolSet, timeout time.Duration, budgeter *ResultBudgeter) *Executor {
 	return &Executor{
 		tools:              tools,
 		timeout:            timeout,
-		budgeter:           NewResultBudgeter(),
+		budgeter:           budgeter,
 		loadedMCPToolNames: make(map[string]struct{}),
 	}
 }
@@ -65,7 +65,7 @@ func (e *Executor) Execute(ctx context.Context, call Call) (Result, error) {
 	}
 
 	result = normalizeResult(call, result)
-	result = e.budgeter.Apply(result, selected.Metadata())
+	result = e.budgeter.Apply(result)
 	e.tools.MarkUsed(call.Name)
 	e.recordMCPToolLoad(call)
 	return result, nil

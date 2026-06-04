@@ -38,26 +38,23 @@ type Metadata struct {
 	Destructive     bool
 	ConcurrencySafe bool
 	RequireApproval bool
-	MaxResultChars  int
 }
 
 // NewReadOnlyMetadata creates metadata for tools that do not mutate external
 // state.
-func NewReadOnlyMetadata(concurrencySafe bool, maxResultChars int) Metadata {
+func NewReadOnlyMetadata(concurrencySafe bool) Metadata {
 	return Metadata{
 		ReadOnly:        true,
 		ConcurrencySafe: concurrencySafe,
-		MaxResultChars:  maxResultChars,
 	}
 }
 
 // NewWriteMetadata creates metadata for tools that can mutate state.
-func NewWriteMetadata(destructive bool, requireApproval bool, maxResultChars int) Metadata {
+func NewWriteMetadata(destructive bool, requireApproval bool) Metadata {
 	return Metadata{
 		ReadOnly:        false,
 		Destructive:     destructive,
 		RequireApproval: requireApproval,
-		MaxResultChars:  maxResultChars,
 	}
 }
 

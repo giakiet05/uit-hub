@@ -15,24 +15,10 @@ type RunInput struct {
 	SessionID       string
 	UserPrompt      string
 	Conversation    *conversation.Conversation
-	PromptSnapshot  prompt.SessionPrompt
+	PromptSnapshot  prompt.SystemPrompt
 	Tools           *tool.ToolSet
+	ResultBudgeter  *tool.ResultBudgeter
 	ConcurrentTools bool
-}
-
-// BuildAgentMessages prepends the session prompt snapshot to the active
-// conversation for one LLM call.
-func (i RunInput) BuildAgentMessages(uncached []prompt.UncachedPart) []conversation.Message {
-	if i.Conversation == nil {
-		return nil
-	}
-	return prompt.NewBuilder(i.PromptSnapshot).BuildAgentMessages(uncached, i.Conversation.Messages())
-}
-
-// BuildMessages prepends the session prompt snapshot to custom messages for
-// internal agent calls such as planning and finalization.
-func (i RunInput) BuildMessages(uncached []prompt.UncachedPart, messages []conversation.Message) []conversation.Message {
-	return prompt.NewBuilder(i.PromptSnapshot).BuildAgentMessages(uncached, messages)
 }
 
 // ToolDefinitions returns all tools visible to the model for this run.

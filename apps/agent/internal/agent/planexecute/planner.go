@@ -14,7 +14,7 @@ func (a *PlanAndExecuteAgent) createPlan(
 	input agent.RunInput,
 	stats *agent.RunStats,
 ) (executionPlan, error) {
-	messages := input.BuildMessages(nil, []conversation.Message{
+	messages := input.PromptSnapshot.BuildMessages(nil, []conversation.Message{
 		conversation.NewUserMessage(plannerPrompt(input.UserPrompt, input.ToolDefinitions())),
 	})
 	response, err := a.callModel(ctx, events, input.SessionID, 0, messages, nil, stats)

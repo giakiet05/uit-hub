@@ -18,7 +18,7 @@ func (a *PlanAndExecuteAgent) finalize(
 	state executionState,
 	stats *agent.RunStats,
 ) (conversation.AssistantMessage, error) {
-	messages := input.BuildMessages(nil, []conversation.Message{
+	messages := input.PromptSnapshot.BuildMessages(nil, []conversation.Message{
 		conversation.NewUserMessage(finalizerPrompt(input.UserPrompt, plan, results, state)),
 	})
 	response, err := a.callModel(ctx, events, input.SessionID, stats.Rounds, messages, nil, stats)

@@ -25,3 +25,4 @@ coverage.out
 apps/fake-uit-server/server
  
 TODO.md
+*.db

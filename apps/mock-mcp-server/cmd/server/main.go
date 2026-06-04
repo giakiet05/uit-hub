@@ -153,6 +153,18 @@ type searchCoursesOutput struct {
 	Courses []course `json:"courses" jsonschema:"matching courses"`
 }
 
+type largeRAGSearchInput struct {
+	Query  string `json:"query" jsonschema:"search query text"`
+	Repeat int    `json:"repeat,omitempty" jsonschema:"number of repeated mock chunks to return"`
+}
+
+type largeRAGSearchOutput struct {
+	Query       string `json:"query" jsonschema:"search query text"`
+	ChunkCount  int    `json:"chunk_count" jsonschema:"number of returned chunks"`
+	ResultChars int    `json:"result_chars" jsonschema:"result text length in characters"`
+	Result      string `json:"result" jsonschema:"long mock RAG result text"`
+}
+
 type getStudentScheduleInput struct {
 	StudentID string `json:"student_id" jsonschema:"student ID"`
 	Term      string `json:"term,omitempty" jsonschema:"academic term; omit to use current term"`
@@ -353,6 +365,12 @@ func registerTools(server *mcp.Server, data *store, delay time.Duration) {
 		Description: "Read mock course catalog entries using query text and tags.",
 		InputSchema: safeSchema[searchCoursesInput](),
 	}, withDelay(delay, data.searchCourses))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "large_rag_search",
+		Description: "Return a very large mock RAG search result for testing context compaction.",
+		InputSchema: safeSchema[largeRAGSearchInput](),
+	}, withDelay(delay, data.largeRAGSearch))
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_student_schedule",
@@ -580,6 +598,44 @@ func (s *store) searchCourses(ctx context.Context, req *mcp.CallToolRequest, inp
 	return nil, searchCoursesOutput{
 		Count:   len(results),
 		Courses: results,
+	}, nil
+}
+
+func (s *store) largeRAGSearch(ctx context.Context, req *mcp.CallToolRequest, input largeRAGSearchInput) (*mcp.CallToolResult, largeRAGSearchOutput, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, largeRAGSearchOutput{}, err
+	}
+
+	query := strings.TrimSpace(input.Query)
+	if query == "" {
+		query = "general student support"
+	}
+	repeat := input.Repeat
+	if repeat <= 0 {
+		repeat = 120
+	}
+	if repeat > 1000 {
+		repeat = 1000
+	}
+
+	var builder strings.Builder
+	builder.WriteString("LARGE_RAG_RESULT_START\n")
+	for index := 1; index <= repeat; index++ {
+		builder.WriteString(fmt.Sprintf(
+			"[chunk %03d] query=%q source=mock-rag://uit/policy/%03d content=This is a long mock retrieved passage about academic policy, student support, course planning, advisor workflows, and operational guidance. It intentionally repeats structured text so the agent can test result budgeting and microcompact behavior without relying on a real RAG server.\n",
+			index,
+			query,
+			index,
+		))
+	}
+	builder.WriteString("LARGE_RAG_RESULT_END")
+
+	result := builder.String()
+	return nil, largeRAGSearchOutput{
+		Query:       query,
+		ChunkCount:  repeat,
+		ResultChars: len([]rune(result)),
+		Result:      result,
 	}, nil
 }
 

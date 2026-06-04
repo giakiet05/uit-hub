@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/mcpadapter"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/memory"
 )
@@ -14,7 +13,6 @@ import (
 type State struct {
 	Config      config.Config
 	Logger      *slog.Logger
-	Provider    llm.Provider
 	MemoryStore memory.Store
 	MCPManager  *mcpadapter.Manager
 	Closers     []io.Closer

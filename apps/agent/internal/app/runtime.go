@@ -2,12 +2,11 @@ package app
 
 import (
 	"context"
+	"io"
 	"log/slog"
-
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/event/handler"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/storage"
 )
@@ -17,17 +16,11 @@ type Runtime struct {
 	State              *State
 	Session            *session.Session
 	Bus                *bus.EventBus
-	UsageEventHandler   *handler.UsageEventHandler
-	LoggerEventHandler  *handler.LoggerEventHandler
-	StorageEventHandler *handler.StorageEventHandler
+	EventHandlerCloser io.Closer
 }
 
-// NewRuntime wires provider, memory, tools, prompt, and session state.
+// NewRuntime wires memory, tools, prompt, and session state.
 func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, resume bool, resumeID string) (*Runtime, error) {
-	provider, err := newProvider(cfg, logger)
-	if err != nil {
-		return nil, err
-	}
 
 	memoryStore := newMemoryStore(cfg)
 
@@ -40,7 +33,6 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 	state := &State{
 		Config:      cfg,
 		Logger:      logger,
-		Provider:    provider,
 		MemoryStore: memoryStore,
 		MCPManager:  mcpManager,
 		Closers:     closers,
@@ -80,30 +72,10 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 	}
 	logger.DebugContext(ctx, "Session toolset initialized", "tool_count", len(sessionState.ToolDefinitions()))
 
-	runtimeAgent, err := newAgent(cfg, provider, logger)
-	if err != nil {
-		closeAll(ctx, logger, closers)
-		return nil, err
-	}
-
 	bus := bus.New(128, logger)
-	
-	usageSub := handler.NewUsageEventHandler(ctx, sessionState, bus, logger)
-	usageSub.Start()
-	
-	loggerSub := handler.NewLoggerEventHandler(ctx, bus, logger)
-	loggerSub.Start()
-
-
-
-	var storageSub *handler.StorageEventHandler
-	if db != nil {
-		storageSub = handler.NewStorageEventHandler(ctx, db, sessionState, bus, logger)
-		storageSub.Start()
-	}
+	handlerCloser := StartEventHandlers(ctx, bus, sessionState, db, logger)
 
 	logger.DebugContext(ctx, "Startup configuration",
-		"provider", cfg.Provider,
 		"agent_type", cfg.Agent.Type,
 		"agent_max_rounds", cfg.Agent.MaxRounds,
 		"agent_concurrent_tools", cfg.Agent.ConcurrentTools,
@@ -114,11 +86,9 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 
 	return &Runtime{
 		State:              state,
-		Session:            session.NewSession(sessionState, runtimeAgent, bus),
-		Bus:                 bus,
-		UsageEventHandler:   usageSub,
-		LoggerEventHandler:  loggerSub,
-		StorageEventHandler: storageSub,
+		Session:            session.NewSession(sessionState, nil, bus),
+		Bus:                bus,
+		EventHandlerCloser: handlerCloser,
 	}, nil
 }
 
@@ -126,14 +96,8 @@ func (r *Runtime) Close(ctx context.Context) {
 	if r == nil {
 		return
 	}
-	if r.UsageEventHandler != nil {
-		r.UsageEventHandler.Stop()
-	}
-	if r.LoggerEventHandler != nil {
-		r.LoggerEventHandler.Stop()
-	}
-	if r.StorageEventHandler != nil {
-		r.StorageEventHandler.Stop()
+	if r.EventHandlerCloser != nil {
+		r.EventHandlerCloser.Close()
 	}
 	if r.Bus != nil {
 		r.Bus.Close()

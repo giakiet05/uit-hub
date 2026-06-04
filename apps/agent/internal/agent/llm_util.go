@@ -12,15 +12,15 @@ import (
 // and the agent's reactive event loop.
 func GenerateWithStream(
 	ctx context.Context,
-	provider llm.Provider,
+	model llm.Model,
 	request llm.GenerateRequest,
 	events chan<- Event,
 	round int,
 ) (llm.GenerateResponse, bool, error) {
-	streamer, ok := provider.(llm.StreamProvider)
+	streamer, ok := model.(llm.StreamModel)
 	if !ok {
 		// Fallback to synchronous generation if provider doesn't support streaming
-		response, err := provider.Generate(ctx, request)
+		response, err := model.Generate(ctx, request)
 		return response, false, err
 	}
 

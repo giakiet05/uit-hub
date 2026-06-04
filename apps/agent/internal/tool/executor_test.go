@@ -20,7 +20,7 @@ func TestExecutorExecutesAndMarksRuntimeToolUsed(t *testing.T) {
 	if err := runtime.Register(testTool{name: "second", content: "second-result"}); err != nil {
 		t.Fatalf("Register(second) error = %v", err)
 	}
-	executor := NewExecutor(NewToolSet(base, runtime), 0)
+	executor := NewExecutor(NewToolSet(base, runtime), 0, nil)
 
 	result, err := executor.Execute(context.Background(), Call{
 		ID:   "call-1",
@@ -49,7 +49,7 @@ func TestExecutorReturnsSanitizedToolError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
-	executor := NewExecutor(NewToolSet(base, NewRuntimeRegistry(1)), 0)
+	executor := NewExecutor(NewToolSet(base, NewRuntimeRegistry(1)), 0, nil)
 
 	_, err = executor.Execute(context.Background(), Call{Name: "failing"})
 	if err == nil {
@@ -72,7 +72,7 @@ func TestExecutorTimesOutTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
-	executor := NewExecutor(NewToolSet(base, NewRuntimeRegistry(1)), time.Millisecond)
+	executor := NewExecutor(NewToolSet(base, NewRuntimeRegistry(1)), time.Millisecond, nil)
 
 	_, err = executor.Execute(context.Background(), Call{Name: "blocking"})
 	if err == nil {
@@ -87,14 +87,14 @@ func TestExecutorBudgetsLongResult(t *testing.T) {
 	base, err := NewBaseRegistry(budgetedTestTool{
 		BaseTool: NewBaseTool(
 			Definition{Name: "long", Description: "long result", InputSchema: EmptyInputSchema()},
-			NewReadOnlyMetadata(true, 5),
+			NewReadOnlyMetadata(true),
 		),
 		content: "0123456789",
 	})
 	if err != nil {
 		t.Fatalf("NewBaseRegistry() error = %v", err)
 	}
-	executor := NewExecutor(NewToolSet(base, NewRuntimeRegistry(1)), 0)
+	executor := NewExecutor(NewToolSet(base, NewRuntimeRegistry(1)), 0, NewResultBudgeter(5))
 
 	result, err := executor.Execute(context.Background(), Call{Name: "long"})
 	if err != nil {
@@ -117,7 +117,7 @@ func (t erroringTestTool) Definition() Definition {
 }
 
 func (t erroringTestTool) Metadata() Metadata {
-	return NewReadOnlyMetadata(true, DefaultMaxResultChars)
+	return NewReadOnlyMetadata(true)
 }
 
 func (t erroringTestTool) Execute(ctx context.Context, call Call) (Result, error) {
@@ -133,7 +133,7 @@ func (t blockingTestTool) Definition() Definition {
 }
 
 func (t blockingTestTool) Metadata() Metadata {
-	return NewReadOnlyMetadata(true, DefaultMaxResultChars)
+	return NewReadOnlyMetadata(true)
 }
 
 func (t blockingTestTool) Execute(ctx context.Context, call Call) (Result, error) {

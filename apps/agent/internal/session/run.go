@@ -24,6 +24,14 @@ func NewSession(state *State, runtimeAgent agent.Agent, bus *bus.EventBus) *Sess
 	}
 }
 
+// SetAgent dynamically replaces the stateless agent service for this session.
+// It is safe to call before the next Run.
+func (s *Session) SetAgent(a agent.Agent) {
+	if s != nil {
+		s.agent = a
+	}
+}
+
 // Bus returns the EventBus attached to this session.
 func (s *Session) Bus() *bus.EventBus {
 	if s == nil {
@@ -52,6 +60,7 @@ func (s *Session) Run(ctx context.Context, userPrompt string) {
 		Conversation:    &s.state.Conversation,
 		PromptSnapshot:  s.state.PromptSnapshot,
 		Tools:           s.state.Tools,
+		ResultBudgeter:  s.state.ResultBudgeter,
 		ConcurrentTools: s.state.ConcurrentTools,
 	}
 

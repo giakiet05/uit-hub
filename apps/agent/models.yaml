@@ -1,0 +1,19 @@
+providers:
+  openai:
+    api_key_env: "OPENAI_API_KEY"
+    base_url_env: "OPENAI_BASE_URL"
+    default_base_url: "https://api.openai.com/v1"
+    models:
+      - name: "gpt-5.4-mini"
+        max_context_tokens: 3000
+      - name: "gpt-4o"
+        max_context_tokens: 128000
+      - name: "gpt-4o-mini"
+        max_context_tokens: 128000
+  gemini:
+    api_key_env: "GEMINI_API_KEY"
+    models:
+      - name: "gemini-2.5-pro"
+        max_context_tokens: 2000000
+      - name: "gemini-2.5-flash"
+        max_context_tokens: 1000000

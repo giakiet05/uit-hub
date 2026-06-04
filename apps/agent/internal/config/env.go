@@ -37,6 +37,20 @@ func envIntOrDefault(key string, fallback int) int {
 	return parsed
 }
 
+// envFloatOrDefault reads a floating-point environment variable.
+func envFloatOrDefault(key string, fallback float64) float64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
 // envDurationOrDefault reads a time.Duration environment variable.
 func envDurationOrDefault(key string, fallback time.Duration) time.Duration {
 	value := strings.TrimSpace(os.Getenv(key))

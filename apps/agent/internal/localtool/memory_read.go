@@ -29,7 +29,7 @@ func NewMemoryRead(store memory.Store) *MemoryRead {
 					"id",
 				),
 			},
-			tool.NewReadOnlyMetadata(false, tool.DefaultMaxResultChars),
+			tool.NewReadOnlyMetadata(false),
 		),
 		store: store,
 	}

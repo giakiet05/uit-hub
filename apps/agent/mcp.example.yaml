@@ -4,6 +4,7 @@ client:
 
 servers:
   - name: mock_uit
+    description: Mock UIT MCP server with academic, advising, and compaction test tools.
     transport: stdio
     command: go
     args:
