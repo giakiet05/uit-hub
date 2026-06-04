@@ -59,17 +59,9 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 			maxTokens = a.model.MaxContextTokens()
 		}
 
-		// Compact context if it exceeds thresholds
 		maxHistoryTokens := maxTokens - sysTokens
-		compacted, info := conversation.CompactContext(input.Conversation.Messages(), maxHistoryTokens, a.compaction)
-		input.Conversation.SetMessages(compacted)
-		if info != "" {
-			if !agent.Emit(ctx, events, agent.CompactionTriggeredEvent{
-				SessionID: input.SessionID,
-				Info:      info,
-			}) {
-				return
-			}
+		if ok := a.prepareContext(ctx, events, input, maxHistoryTokens, stats, round == 1); !ok {
+			return
 		}
 
 		messages := input.PromptSnapshot.BuildMessages(nil, input.Conversation.Messages())

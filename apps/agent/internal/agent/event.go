@@ -43,7 +43,7 @@ type RoundStartedEvent struct {
 	MaxContextTokens     int
 }
 
-// CompactionTriggeredEvent is emitted when the conversation history is truncated.
+// CompactionTriggeredEvent is emitted when the conversation history is compacted.
 type CompactionTriggeredEvent struct {
 	SessionID string
 	Info      string
@@ -178,62 +178,62 @@ type RunFailedEvent struct {
 	Stats     RunStats
 }
 
-func (RunStartedEvent) isAgentEvent()         {}
+func (RunStartedEvent) isAgentEvent()    {}
 func (RunStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (RoundStartedEvent) isAgentEvent()         {}
+func (RoundStartedEvent) isAgentEvent()    {}
 func (RoundStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (CompactionTriggeredEvent) isAgentEvent()         {}
+func (CompactionTriggeredEvent) isAgentEvent()    {}
 func (CompactionTriggeredEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (ModelCallStartedEvent) isAgentEvent()         {}
+func (ModelCallStartedEvent) isAgentEvent()    {}
 func (ModelCallStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (ModelCallCompletedEvent) isAgentEvent()         {}
+func (ModelCallCompletedEvent) isAgentEvent()    {}
 func (ModelCallCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (ModelTextDeltaEvent) isAgentEvent()         {}
+func (ModelTextDeltaEvent) isAgentEvent()    {}
 func (ModelTextDeltaEvent) Topic() bus.Topic { return bus.TopicStream }
 
-func (PlanCreatedEvent) isAgentEvent()         {}
+func (PlanCreatedEvent) isAgentEvent()    {}
 func (PlanCreatedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (StepStartedEvent) isAgentEvent()         {}
+func (StepStartedEvent) isAgentEvent()    {}
 func (StepStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (StepCompletedEvent) isAgentEvent()         {}
+func (StepCompletedEvent) isAgentEvent()    {}
 func (StepCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (StepFailedEvent) isAgentEvent()         {}
+func (StepFailedEvent) isAgentEvent()    {}
 func (StepFailedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (ReplanStartedEvent) isAgentEvent()         {}
+func (ReplanStartedEvent) isAgentEvent()    {}
 func (ReplanStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (PlanUpdatedEvent) isAgentEvent()         {}
+func (PlanUpdatedEvent) isAgentEvent()    {}
 func (PlanUpdatedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (FinalizingEvent) isAgentEvent()         {}
+func (FinalizingEvent) isAgentEvent()    {}
 func (FinalizingEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (ToolCallStartedEvent) isAgentEvent()         {}
+func (ToolCallStartedEvent) isAgentEvent()    {}
 func (ToolCallStartedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (ToolPermissionRequestEvent) isAgentEvent()         {}
+func (ToolPermissionRequestEvent) isAgentEvent()    {}
 func (ToolPermissionRequestEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (ToolCallCompletedEvent) isAgentEvent()         {}
+func (ToolCallCompletedEvent) isAgentEvent()    {}
 func (ToolCallCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (ToolCallFailedEvent) isAgentEvent()         {}
+func (ToolCallFailedEvent) isAgentEvent()    {}
 func (ToolCallFailedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (FinalAnswerEvent) isAgentEvent()         {}
+func (FinalAnswerEvent) isAgentEvent()    {}
 func (FinalAnswerEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (RunCompletedEvent) isAgentEvent()         {}
+func (RunCompletedEvent) isAgentEvent()    {}
 func (RunCompletedEvent) Topic() bus.Topic { return bus.TopicLifecycle }
 
-func (RunFailedEvent) isAgentEvent()         {}
+func (RunFailedEvent) isAgentEvent()    {}
 func (RunFailedEvent) Topic() bus.Topic { return bus.TopicLifecycle }

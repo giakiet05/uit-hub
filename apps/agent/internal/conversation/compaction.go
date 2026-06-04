@@ -7,6 +7,8 @@ import (
 )
 
 const DefaultMicrocompactMinChars = 12000
+const defaultMicrocompactTriggerRatio = 0.70
+const defaultSnipTriggerRatio = 0.95
 
 var tokenizer *tiktoken.Tiktoken
 
@@ -41,6 +43,8 @@ type CompactionOptions struct {
 	DisableMicrocompact               bool
 	MicrocompactMinChars              int
 	MicrocompactKeepRecentToolResults int
+	MicrocompactTriggerRatio          float64
+	SnipTriggerRatio                  float64
 }
 
 // CompactContext manages the size of the conversation context array to ensure
@@ -54,26 +58,19 @@ func CompactContext(messages []Message, maxContextTokens int, options Compaction
 		options.MicrocompactMinChars = DefaultMicrocompactMinChars
 	}
 
-	// Calculate thresholds
-	// Microcompact fires at 85%
-	microThreshold := int(float64(maxContextTokens) * 0.85)
-	// Snip fires at 95%
-	snipThreshold := int(float64(maxContextTokens) * 0.95)
+	microThreshold := int(float64(maxContextTokens) * ratioOrDefault(
+		options.MicrocompactTriggerRatio,
+		defaultMicrocompactTriggerRatio,
+	))
+	snipThreshold := int(float64(maxContextTokens) * ratioOrDefault(
+		options.SnipTriggerRatio,
+		defaultSnipTriggerRatio,
+	))
 
 	currentTokens := EstimateTokens(messages)
 	info := ""
 
-	// Layer 1: Snip Compact (Remove old messages)
-	if !options.DisableSnip && currentTokens > snipThreshold {
-		preSnip := currentTokens
-		messages = SnipCompact(messages, snipThreshold)
-		currentTokens = EstimateTokens(messages)
-		if currentTokens < preSnip {
-			info += fmt.Sprintf("[SnipCompact] Removed old messages (%d -> %d tokens).\n", preSnip, currentTokens)
-		}
-	}
-
-	// Layer 2: Microcompact (Hide Tool Result Data)
+	// Layer 1: Microcompact (Hide old large tool result data)
 	if !options.DisableMicrocompact && currentTokens > microThreshold {
 		preMicrocompact := currentTokens
 		messages = Microcompact(
@@ -88,7 +85,24 @@ func CompactContext(messages []Message, maxContextTokens int, options Compaction
 		}
 	}
 
+	// Layer 2: Snip Compact (Remove old messages as a last cheap fallback)
+	if !options.DisableSnip && currentTokens > snipThreshold {
+		preSnip := currentTokens
+		messages = SnipCompact(messages, snipThreshold)
+		currentTokens = EstimateTokens(messages)
+		if currentTokens < preSnip {
+			info += fmt.Sprintf("[SnipCompact] Removed old messages (%d -> %d tokens).\n", preSnip, currentTokens)
+		}
+	}
+
 	return messages, info
+}
+
+func ratioOrDefault(value float64, fallback float64) float64 {
+	if value <= 0 || value > 1 {
+		return fallback
+	}
+	return value
 }
 
 // Microcompact iterates from oldest to newest messages and truncates the
@@ -185,6 +199,99 @@ func SnipCompact(messages []Message, targetTokens int) []Message {
 type messageBlock struct {
 	start int
 	end   int
+}
+
+// CollapseSegment is a contiguous range of old user-turn blocks selected for
+// LLM-backed context collapse.
+type CollapseSegment struct {
+	Start  int
+	End    int
+	Tokens int
+}
+
+// CollapseSegmentOptions controls how old user-turn blocks are grouped for
+// context collapse.
+type CollapseSegmentOptions struct {
+	KeepRecentTurns     int
+	MaxSegments         int
+	MinSegmentTokens    int
+	TargetTokensToCover int
+}
+
+// BuildCollapseSegments selects old user-turn blocks and groups them into a
+// small number of large segments. Recent turns are protected because they are
+// most likely relevant to the current task.
+func BuildCollapseSegments(messages []Message, options CollapseSegmentOptions) []CollapseSegment {
+	blocks := userTurnBlocks(messages)
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	candidateCount := len(blocks) - max(options.KeepRecentTurns, 0)
+	if candidateCount <= 0 {
+		return nil
+	}
+
+	maxSegments := options.MaxSegments
+	if maxSegments <= 0 {
+		maxSegments = 1
+	}
+	minSegmentTokens := options.MinSegmentTokens
+	if minSegmentTokens <= 0 {
+		minSegmentTokens = 1
+	}
+
+	segments := make([]CollapseSegment, 0, maxSegments)
+	coveredTokens := 0
+	for index := 0; index < candidateCount && len(segments) < maxSegments; {
+		start := blocks[index].start
+		end := blocks[index].end
+		segmentTokens := EstimateTokens(messages[start:end])
+		index++
+
+		for index < candidateCount && segmentTokens < minSegmentTokens {
+			end = blocks[index].end
+			segmentTokens = EstimateTokens(messages[start:end])
+			index++
+		}
+
+		segments = append(segments, CollapseSegment{
+			Start:  start,
+			End:    end,
+			Tokens: segmentTokens,
+		})
+		coveredTokens += segmentTokens
+
+		if options.TargetTokensToCover > 0 && coveredTokens >= options.TargetTokensToCover {
+			break
+		}
+	}
+
+	return segments
+}
+
+// ReplaceCollapseSegments replaces selected old segments with compact summary
+// messages. Segments must refer to indexes in the original messages slice.
+func ReplaceCollapseSegments(messages []Message, segments []CollapseSegment, summaries []string) []Message {
+	if len(segments) == 0 || len(segments) != len(summaries) {
+		return messages
+	}
+
+	compacted := append([]Message(nil), messages...)
+	for index := len(segments) - 1; index >= 0; index-- {
+		segment := segments[index]
+		if segment.Start < 0 || segment.End > len(compacted) || segment.Start >= segment.End {
+			continue
+		}
+		summary := NewUserMessage("[Context summary of older conversation]\n" + summaries[index])
+		replacement := []Message{summary}
+		next := append([]Message{}, compacted[:segment.Start]...)
+		next = append(next, replacement...)
+		next = append(next, compacted[segment.End:]...)
+		compacted = next
+	}
+
+	return compacted
 }
 
 func userTurnBlocks(messages []Message) []messageBlock {

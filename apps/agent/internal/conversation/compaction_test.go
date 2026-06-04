@@ -95,6 +95,82 @@ func TestSnipCompactDoesNotRemoveOnlyUserTurn(t *testing.T) {
 	}
 }
 
+func TestBuildCollapseSegmentsKeepsRecentTurns(t *testing.T) {
+	messages := []Message{
+		NewUserMessage("old one " + strings.Repeat("a ", 100)),
+		NewAssistantMessage("old one answer", nil),
+		NewUserMessage("old two " + strings.Repeat("b ", 100)),
+		NewAssistantMessage("old two answer", nil),
+		NewUserMessage("recent " + strings.Repeat("c ", 100)),
+		NewAssistantMessage("recent answer", nil),
+	}
+
+	segments := BuildCollapseSegments(messages, CollapseSegmentOptions{
+		KeepRecentTurns:  1,
+		MaxSegments:      2,
+		MinSegmentTokens: 1,
+	})
+
+	if got, want := len(segments), 2; got != want {
+		t.Fatalf("len(segments) = %d, want %d", got, want)
+	}
+	compactedText := transcriptText(messages[segments[0].Start:segments[len(segments)-1].End])
+	if !strings.Contains(compactedText, "old one") || !strings.Contains(compactedText, "old two") {
+		t.Fatalf("segments did not include old turns:\n%s", compactedText)
+	}
+	if strings.Contains(compactedText, "recent") {
+		t.Fatalf("segments included recent turn:\n%s", compactedText)
+	}
+}
+
+func TestBuildCollapseSegmentsGroupsSmallBlocks(t *testing.T) {
+	messages := []Message{
+		NewUserMessage(strings.Repeat("first ", 80)),
+		NewAssistantMessage("first answer", nil),
+		NewUserMessage(strings.Repeat("second ", 80)),
+		NewAssistantMessage("second answer", nil),
+		NewUserMessage("recent"),
+		NewAssistantMessage("recent answer", nil),
+	}
+
+	segments := BuildCollapseSegments(messages, CollapseSegmentOptions{
+		KeepRecentTurns:  1,
+		MaxSegments:      3,
+		MinSegmentTokens: 1000,
+	})
+
+	if got, want := len(segments), 1; got != want {
+		t.Fatalf("len(segments) = %d, want grouped segment", got)
+	}
+	segmentText := transcriptText(messages[segments[0].Start:segments[0].End])
+	if !strings.Contains(segmentText, "first") || !strings.Contains(segmentText, "second") {
+		t.Fatalf("small blocks were not grouped:\n%s", segmentText)
+	}
+}
+
+func TestReplaceCollapseSegmentsPreservesOrder(t *testing.T) {
+	messages := []Message{
+		NewUserMessage("old user"),
+		NewAssistantMessage("old assistant", nil),
+		NewUserMessage("new user"),
+		NewAssistantMessage("new assistant", nil),
+	}
+	segments := []CollapseSegment{{Start: 0, End: 2}}
+
+	compacted := ReplaceCollapseSegments(messages, segments, []string{"old summary"})
+	transcript := transcriptText(compacted)
+
+	if strings.Contains(transcript, "old user") || strings.Contains(transcript, "old assistant") {
+		t.Fatalf("old segment was not replaced:\n%s", transcript)
+	}
+	if !strings.Contains(transcript, "old summary") {
+		t.Fatalf("summary missing:\n%s", transcript)
+	}
+	if !strings.Contains(transcript, "new user") || !strings.Contains(transcript, "new assistant") {
+		t.Fatalf("new segment order was not preserved:\n%s", transcript)
+	}
+}
+
 func transcriptText(messages []Message) string {
 	var builder strings.Builder
 	for _, message := range messages {

@@ -15,10 +15,11 @@ const defaultToolTimeout = 15 * time.Second
 // ReActAgent implements the baseline reason-act-observe loop for tool-calling
 // agents.
 type ReActAgent struct {
-	model       llm.Model
-	maxRounds   int
-	toolTimeout time.Duration
-	compaction  conversation.CompactionOptions
+	model           llm.Model
+	maxRounds       int
+	toolTimeout     time.Duration
+	compaction      conversation.CompactionOptions
+	contextCollapse ContextCollapseOptions
 }
 
 // ReActOption configures optional ReActAgent dependencies and limits.
@@ -27,10 +28,11 @@ type ReActOption func(*ReActAgent)
 // NewReActAgent constructs a ReActAgent with defaults, then applies overrides.
 func NewReActAgent(model llm.Model, opts ...ReActOption) *ReActAgent {
 	agent := &ReActAgent{
-		model:       model,
-		maxRounds:   defaultMaxToolIterations,
-		toolTimeout: defaultToolTimeout,
-		compaction:  conversation.CompactionOptions{},
+		model:           model,
+		maxRounds:       defaultMaxToolIterations,
+		toolTimeout:     defaultToolTimeout,
+		compaction:      conversation.CompactionOptions{},
+		contextCollapse: ContextCollapseOptions{},
 	}
 
 	for _, opt := range opts {
@@ -64,6 +66,13 @@ func WithToolTimeout(timeout time.Duration) ReActOption {
 func WithCompaction(options conversation.CompactionOptions) ReActOption {
 	return func(agent *ReActAgent) {
 		agent.compaction = options
+	}
+}
+
+// WithContextCollapse configures LLM-backed conversation context collapse.
+func WithContextCollapse(options ContextCollapseOptions) ReActOption {
+	return func(agent *ReActAgent) {
+		agent.contextCollapse = options
 	}
 }
 

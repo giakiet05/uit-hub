@@ -46,10 +46,18 @@ type CompactionConfig struct {
 	ToolResultBudgetEnabled           bool
 	ToolResultBudgetMaxChars          int
 	SnipEnabled                       bool
+	SnipTriggerRatio                  float64
 	MicrocompactEnabled               bool
+	MicrocompactTriggerRatio          float64
 	MicrocompactMinChars              int
 	MicrocompactKeepRecentToolResults int
 	ContextCollapseEnabled            bool
+	ContextCollapseTriggerRatio       float64
+	ContextCollapseTargetRatio        float64
+	ContextCollapseKeepRecentTurns    int
+	ContextCollapseMaxSegments        int
+	ContextCollapseMaxConcurrency     int
+	ContextCollapseMinSegmentTokens   int
 	AutoCompactEnabled                bool
 }
 
@@ -108,10 +116,18 @@ func Load() (Config, error) {
 			ToolResultBudgetEnabled:           envBoolOrDefault("COMPACTION_TOOL_RESULT_BUDGET_ENABLED", true),
 			ToolResultBudgetMaxChars:          envIntOrDefault("COMPACTION_TOOL_RESULT_BUDGET_MAX_CHARS", 12000),
 			SnipEnabled:                       envBoolOrDefault("COMPACTION_SNIP_ENABLED", true),
+			SnipTriggerRatio:                  envFloatOrDefault("COMPACTION_SNIP_TRIGGER_RATIO", 0.95),
 			MicrocompactEnabled:               envBoolOrDefault("COMPACTION_MICROCOMPACT_ENABLED", true),
+			MicrocompactTriggerRatio:          envFloatOrDefault("COMPACTION_MICROCOMPACT_TRIGGER_RATIO", 0.70),
 			MicrocompactMinChars:              envIntOrDefault("COMPACTION_MICROCOMPACT_MIN_CHARS", 12000),
-			MicrocompactKeepRecentToolResults: envIntOrDefault("COMPACTION_MICROCOMPACT_KEEP_RECENT_TOOL_RESULTS", 2),
+			MicrocompactKeepRecentToolResults: envIntOrDefault("COMPACTION_MICROCOMPACT_KEEP_RECENT_TOOL_RESULTS", 8),
 			ContextCollapseEnabled:            envBoolOrDefault("COMPACTION_CONTEXT_COLLAPSE_ENABLED", false),
+			ContextCollapseTriggerRatio:       envFloatOrDefault("COMPACTION_CONTEXT_COLLAPSE_TRIGGER_RATIO", 0.80),
+			ContextCollapseTargetRatio:        envFloatOrDefault("COMPACTION_CONTEXT_COLLAPSE_TARGET_RATIO", 0.65),
+			ContextCollapseKeepRecentTurns:    envIntOrDefault("COMPACTION_CONTEXT_COLLAPSE_KEEP_RECENT_TURNS", 3),
+			ContextCollapseMaxSegments:        envIntOrDefault("COMPACTION_CONTEXT_COLLAPSE_MAX_SEGMENTS", 3),
+			ContextCollapseMaxConcurrency:     envIntOrDefault("COMPACTION_CONTEXT_COLLAPSE_MAX_CONCURRENCY", 2),
+			ContextCollapseMinSegmentTokens:   envIntOrDefault("COMPACTION_CONTEXT_COLLAPSE_MIN_SEGMENT_TOKENS", 1500),
 			AutoCompactEnabled:                envBoolOrDefault("COMPACTION_AUTO_COMPACT_ENABLED", false),
 		},
 	}
