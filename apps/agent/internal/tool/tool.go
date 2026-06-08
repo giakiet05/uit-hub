@@ -34,10 +34,11 @@ type Result struct {
 // Metadata describes execution behavior that the agent runtime needs but the
 // LLM provider does not.
 type Metadata struct {
-	ReadOnly        bool
-	Destructive     bool
-	ConcurrencySafe bool
-	RequireApproval bool
+	ReadOnly          bool
+	Destructive       bool
+	ConcurrencySafe   bool
+	RequireApproval   bool
+	FinishOnInterrupt bool
 }
 
 // NewReadOnlyMetadata creates metadata for tools that do not mutate external
@@ -52,9 +53,10 @@ func NewReadOnlyMetadata(concurrencySafe bool) Metadata {
 // NewWriteMetadata creates metadata for tools that can mutate state.
 func NewWriteMetadata(destructive bool, requireApproval bool) Metadata {
 	return Metadata{
-		ReadOnly:        false,
-		Destructive:     destructive,
-		RequireApproval: requireApproval,
+		ReadOnly:          false,
+		Destructive:       destructive,
+		RequireApproval:   requireApproval,
+		FinishOnInterrupt: requireApproval,
 	}
 }
 

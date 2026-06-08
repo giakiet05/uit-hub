@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
@@ -47,6 +48,68 @@ func TestModelRendersConversationAndLogs(t *testing.T) {
 	}
 	if strings.Contains(view, "user:") || strings.Contains(view, "assistant:") {
 		t.Fatalf("view should not render role prefixes:\n%s", view)
+	}
+}
+
+func TestModelRunningCtrlCCancelsRunWithoutQuit(t *testing.T) {
+	m := newModel(context.Background(), newTestSession(), nil, "")
+	m.width = 80
+	m.height = 24
+	m.resizeViewports()
+	m.running = true
+	canceled := false
+	m.runCancel = func() {
+		canceled = true
+	}
+
+	updated, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd != nil {
+		if _, ok := cmd().(tea.QuitMsg); ok {
+			t.Fatal("ctrl+c while running should not quit")
+		}
+	}
+	if !canceled {
+		t.Fatal("ctrl+c while running did not cancel run")
+	}
+	model, ok := updated.(model)
+	if !ok {
+		t.Fatalf("updated model = %T, want tui.model", updated)
+	}
+	if model.status != "interrupting" {
+		t.Fatalf("status = %q, want interrupting", model.status)
+	}
+}
+
+func TestModelIdleCtrlCClearsVisibleOutput(t *testing.T) {
+	m := newModel(context.Background(), newTestSession(), nil, "")
+	m.width = 80
+	m.height = 24
+	m.resizeViewports()
+	m.conversation = []conversationItem{{role: conversationRoleUser, text: "hello"}}
+	m.logLines = []string{"debug log"}
+	m.streamingIndex = 0
+	m.syncConversation(true)
+	m.syncLogs(true)
+
+	updated, cmd := m.updateKey(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd != nil {
+		if _, ok := cmd().(tea.QuitMsg); ok {
+			t.Fatal("first idle ctrl+c should not quit")
+		}
+	}
+
+	model, ok := updated.(model)
+	if !ok {
+		t.Fatalf("updated model = %T, want tui.model", updated)
+	}
+	if len(model.conversation) != 0 {
+		t.Fatalf("conversation len = %d, want cleared", len(model.conversation))
+	}
+	if len(model.logLines) != 0 {
+		t.Fatalf("log lines len = %d, want cleared", len(model.logLines))
+	}
+	if model.streamingIndex != -1 {
+		t.Fatalf("streamingIndex = %d, want -1", model.streamingIndex)
 	}
 }
 

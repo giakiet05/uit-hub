@@ -88,7 +88,7 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 
 	return &Runtime{
 		State:              state,
-		Session:            session.NewSession(sessionState, nil, bus, session.WithStore(db), session.WithLogger(logger)),
+		Session:            session.NewSession(sessionState, nil, bus, session.WithStore(db), session.WithLogger(logger), session.WithShutdownContext(ctx)),
 		Bus:                bus,
 		EventHandlerCloser: handlerCloser,
 	}, nil

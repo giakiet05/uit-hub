@@ -33,6 +33,15 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 			Stats:     *stats,
 		})
 	}
+	abort := func() {
+		input.Conversation.Append(conversation.NewAssistantMessage("Run interrupted by user.", nil))
+		runState.Finish()
+		agent.EmitTerminal(events, agent.RunCompletedEvent{
+			SessionID: input.SessionID,
+			Reason:    agent.TerminalAborted,
+			Stats:     *stats,
+		})
+	}
 	complete := func(reason agent.TerminalReason) {
 		runState.Finish()
 		agent.Emit(ctx, events, agent.RunCompletedEvent{
@@ -47,6 +56,10 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 	}
 
 	input.Conversation.Append(conversation.NewUserMessage(input.UserPrompt))
+	if ctx.Err() != nil {
+		abort()
+		return
+	}
 
 	sysTokens := input.PromptSnapshot.EstimateTokens()
 
@@ -61,6 +74,9 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 
 		maxHistoryTokens := maxTokens - sysTokens
 		if ok := a.prepareContext(ctx, events, input, maxHistoryTokens, stats, round == 1); !ok {
+			if ctx.Err() != nil {
+				abort()
+			}
 			return
 		}
 
@@ -90,6 +106,10 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 		}, events, round)
 		llmDuration := time.Since(llmStartedAt)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				abort()
+				return
+			}
 			fail(err)
 			return
 		}
@@ -127,6 +147,13 @@ func (a *ReActAgent) run(ctx context.Context, events chan<- agent.Event, input a
 		}
 
 		if ok := a.executeToolCalls(ctx, events, input, round, toolCalls, stats); !ok {
+			if ctx.Err() != nil {
+				abort()
+			}
+			return
+		}
+		if ctx.Err() != nil {
+			abort()
 			return
 		}
 	}
