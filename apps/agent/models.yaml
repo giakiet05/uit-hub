@@ -5,7 +5,7 @@ providers:
     default_base_url: "https://api.openai.com/v1"
     models:
       - name: "gpt-5.4-mini"
-        max_context_tokens: 3000
+        max_context_tokens: 400000
       - name: "gpt-4o"
         max_context_tokens: 128000
       - name: "gpt-4o-mini"

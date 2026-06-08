@@ -108,6 +108,44 @@ func TestExecutorBudgetsLongResult(t *testing.T) {
 	}
 }
 
+func TestExecutorDropsReadToolResultAfterRunCancel(t *testing.T) {
+	base, err := NewBaseRegistry(testTool{name: "read", content: "done"})
+	if err != nil {
+		t.Fatalf("NewBaseRegistry() error = %v", err)
+	}
+	executor := NewExecutor(NewToolSet(base, NewRuntimeRegistry(1)), 0, nil)
+	runCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = executor.Execute(runCtx, Call{Name: "read"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestExecutorFinishesApprovedToolAfterRunCancel(t *testing.T) {
+	base, err := NewBaseRegistry(forceFinishTestTool{name: "send_email"})
+	if err != nil {
+		t.Fatalf("NewBaseRegistry() error = %v", err)
+	}
+	executor := NewExecutor(
+		NewToolSet(base, NewRuntimeRegistry(1)),
+		0,
+		nil,
+		WithShutdownContext(context.Background()),
+	)
+	runCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result, err := executor.Execute(runCtx, Call{Name: "send_email"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got, want := result.Content, "sent"; got != want {
+		t.Fatalf("result content = %q, want %q", got, want)
+	}
+}
+
 type erroringTestTool struct {
 	name string
 }
@@ -152,4 +190,23 @@ func (t budgetedTestTool) Execute(ctx context.Context, call Call) (Result, error
 		Name:    call.Name,
 		Content: t.content,
 	}, nil
+}
+
+type forceFinishTestTool struct {
+	name string
+}
+
+func (t forceFinishTestTool) Definition() Definition {
+	return Definition{Name: t.name, Description: "write tool", InputSchema: EmptyInputSchema()}
+}
+
+func (t forceFinishTestTool) Metadata() Metadata {
+	return NewWriteMetadata(false, true)
+}
+
+func (t forceFinishTestTool) Execute(ctx context.Context, call Call) (Result, error) {
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
+	}
+	return Result{CallID: call.ID, Name: call.Name, Content: "sent"}, nil
 }

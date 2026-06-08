@@ -13,16 +13,31 @@ type Executor struct {
 	timeout            time.Duration
 	budgeter           *ResultBudgeter
 	loadedMCPToolNames map[string]struct{}
+	shutdownContext    context.Context
+}
+
+// ExecutorOption configures tool executor behavior.
+type ExecutorOption func(*Executor)
+
+// WithShutdownContext sets the app-level context used for force-finish tools.
+func WithShutdownContext(ctx context.Context) ExecutorOption {
+	return func(e *Executor) {
+		e.shutdownContext = ctx
+	}
 }
 
 // NewExecutor creates a tool executor for one agent run.
-func NewExecutor(tools *ToolSet, timeout time.Duration, budgeter *ResultBudgeter) *Executor {
-	return &Executor{
+func NewExecutor(tools *ToolSet, timeout time.Duration, budgeter *ResultBudgeter, opts ...ExecutorOption) *Executor {
+	executor := &Executor{
 		tools:              tools,
 		timeout:            timeout,
 		budgeter:           budgeter,
 		loadedMCPToolNames: make(map[string]struct{}),
 	}
+	for _, opt := range opts {
+		opt(executor)
+	}
+	return executor
 }
 
 // Metadata returns the metadata for a tool by name, if it exists.
@@ -52,16 +67,25 @@ func (e *Executor) Execute(ctx context.Context, call Call) (Result, error) {
 		return Result{}, ClassifyError(call.Name, fmt.Errorf("execute tool %q: %w", call.Name, ErrNotFound))
 	}
 
-	toolCtx := ctx
+	metadata := selected.Metadata()
+	baseCtx := ctx
+	if metadata.FinishOnInterrupt && e.shutdownContext != nil {
+		baseCtx = e.shutdownContext
+	}
+
+	toolCtx := baseCtx
 	if e.timeout > 0 {
 		var cancel context.CancelFunc
-		toolCtx, cancel = context.WithTimeout(ctx, e.timeout)
+		toolCtx, cancel = context.WithTimeout(baseCtx, e.timeout)
 		defer cancel()
 	}
 
 	result, err := selected.Execute(toolCtx, call)
 	if err != nil {
 		return Result{}, ClassifyError(call.Name, fmt.Errorf("execute tool %q: %w", call.Name, err))
+	}
+	if ctx.Err() != nil && !metadata.FinishOnInterrupt {
+		return Result{}, ctx.Err()
 	}
 
 	result = normalizeResult(call, result)

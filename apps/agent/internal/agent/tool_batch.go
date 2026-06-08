@@ -34,7 +34,7 @@ func RunToolBatch(
 	}
 
 	batches := partitionToolCalls(calls, input.Tools)
-	executor := tool.NewExecutor(input.Tools, timeout, input.ResultBudgeter)
+	executor := tool.NewExecutor(input.Tools, timeout, input.ResultBudgeter, tool.WithShutdownContext(input.ShutdownContext))
 	var finalResults []tool.Result
 
 	for _, b := range batches {
@@ -102,6 +102,13 @@ func runSerialBatch(
 			stats.ToolFailures++
 		}
 		results = append(results, result)
+		if ctx.Err() != nil {
+			metadata, exists := executor.Metadata(call.Name)
+			if exists && metadata.FinishOnInterrupt {
+				return results, true
+			}
+			return nil, false
+		}
 	}
 	return results, true
 }
@@ -127,11 +134,6 @@ func runParallelBatch(
 		go func(i int, call conversation.ToolCall) {
 			defer wg.Done()
 
-			// We check if another concurrent execution already failed context (e.g. timeout/cancel).
-			if ctx.Err() != nil {
-				return
-			}
-
 			result, isErr, ok := executeOneTool(ctx, agentType, events, input, round, call, timeout, executor)
 
 			mu.Lock()
@@ -149,7 +151,7 @@ func runParallelBatch(
 	}
 
 	wg.Wait()
-	if !okFlag || ctx.Err() != nil {
+	if !okFlag {
 		return nil, false
 	}
 	return results, true
@@ -228,25 +230,36 @@ func executeOneTool(
 			Name:    call.Name,
 			Content: observation,
 		}
-		if !Emit(ctx, events, ToolCallFailedEvent{
+		failedEvent := ToolCallFailedEvent{
 			SessionID:   input.SessionID,
 			Round:       round,
 			Call:        call,
 			Observation: observation,
 			Duration:    duration,
-		}) {
+		}
+		if ctx.Err() != nil && metadata.FinishOnInterrupt {
+			EmitTerminal(events, failedEvent)
+			return result, true, true
+		}
+		if !Emit(ctx, events, failedEvent) {
 			return tool.Result{}, true, false
 		}
 		return result, true, true
-	} else {
-		if !Emit(ctx, events, ToolCallCompletedEvent{
-			SessionID: input.SessionID,
-			Round:     round,
-			Result:    result,
-			Duration:  duration,
-		}) {
-			return tool.Result{}, false, false
-		}
+	}
+
+	completedEvent := ToolCallCompletedEvent{
+		SessionID: input.SessionID,
+		Round:     round,
+		Result:    result,
+		Duration:  duration,
+	}
+	if ctx.Err() != nil && metadata.FinishOnInterrupt {
+		EmitTerminal(events, completedEvent)
 		return result, false, true
 	}
+
+	if !Emit(ctx, events, completedEvent) {
+		return tool.Result{}, false, false
+	}
+	return result, false, true
 }

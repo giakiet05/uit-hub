@@ -38,12 +38,13 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 		Closers:     closers,
 	}
 
-	db, err := storage.InitDB("agent.db")
+	db, err := storage.InitDB(cfg.Storage.DBPath)
 	if err != nil {
 		logger.ErrorContext(ctx, "Failed to initialize SQLite database", "error", err)
 	}
 
 	var sessionOpts []session.Option
+	var runtimeToolNames []string
 	if db != nil && resume {
 		var record *storage.SessionRecord
 		var dbErr error
@@ -53,9 +54,10 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 			record, dbErr = db.GetLastSession()
 		}
 		if dbErr == nil && record != nil {
-			messages, usage, decErr := record.Decode()
+			messages, usage, restoredRuntimeToolNames, decErr := record.Decode()
 			if decErr == nil {
 				sessionOpts = append(sessionOpts, session.WithHistory(record.ID, record.StartedAt, messages, usage))
+				runtimeToolNames = restoredRuntimeToolNames
 			} else {
 				logger.ErrorContext(ctx, "Failed to decode session history", "error", decErr)
 			}
@@ -64,7 +66,7 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 		}
 	}
 
-	sessionState, err := newSessionState(ctx, state, sessionOpts...)
+	sessionState, err := newSessionState(ctx, state, runtimeToolNames, sessionOpts...)
 	if err != nil {
 		logger.DebugContext(ctx, "Session initialization failed", "error", err)
 		closeAll(ctx, logger, closers)
@@ -73,7 +75,7 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 	logger.DebugContext(ctx, "Session toolset initialized", "tool_count", len(sessionState.ToolDefinitions()))
 
 	bus := bus.New(128, logger)
-	handlerCloser := StartEventHandlers(ctx, bus, sessionState, db, logger)
+	handlerCloser := StartEventHandlers(ctx, bus, logger)
 
 	logger.DebugContext(ctx, "Startup configuration",
 		"agent_type", cfg.Agent.Type,
@@ -86,7 +88,7 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 
 	return &Runtime{
 		State:              state,
-		Session:            session.NewSession(sessionState, nil, bus),
+		Session:            session.NewSession(sessionState, nil, bus, session.WithStore(db), session.WithLogger(logger), session.WithShutdownContext(ctx)),
 		Bus:                bus,
 		EventHandlerCloser: handlerCloser,
 	}, nil

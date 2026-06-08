@@ -23,31 +23,35 @@ const (
 	inputHeight      = 3
 	logTick          = 200 * time.Millisecond
 	mouseScrollLines = 3
+	idleQuitDelay    = 2 * time.Second
 )
 
 type model struct {
-	ctx              context.Context
-	session          *session.Session
-	logs             *LogBuffer
-	width            int
-	height           int
-	input            textinput.Model
-	running          bool
-	status           string
-	streamingIndex   int
-	initialRun       bool
-	mouseEnabled     bool
-	conversation     []conversationItem
-	conversationView viewport.Model
-	lastRunUsage     usage.TokenUsage
-	currentContext   int
-	maxContext       int
-	logLines         []string
-	logView          viewport.Model
-	err              error
+	ctx               context.Context
+	session           *session.Session
+	logs              *LogBuffer
+	runCtx            context.Context
+	runCancel         context.CancelFunc
+	lastIdleCtrlC     time.Time
+	width             int
+	height            int
+	input             textinput.Model
+	running           bool
+	status            string
+	streamingIndex    int
+	initialRun        bool
+	mouseEnabled      bool
+	conversation      []conversationItem
+	conversationView  viewport.Model
+	lastRunUsage      usage.TokenUsage
+	currentContext    int
+	maxContext        int
+	logLines          []string
+	logView           viewport.Model
+	err               error
 	pendingPermission *agent.ToolPermissionRequestEvent
-	bus              *bus.EventBus
-	eventChan        bus.EventChan
+	bus               *bus.EventBus
+	eventChan         bus.EventChan
 }
 
 type conversationRole string
@@ -147,10 +151,14 @@ func buildInitialConversation(session *session.Session) []conversationItem {
 				})
 			}
 		case conversation.ToolResultMessage:
+			observeText := strings.TrimSpace(text)
+			if observeText == "" {
+				observeText = "tool completed"
+			}
 			items = append(items, conversationItem{
 				role:         conversationRoleActivity,
 				activityKind: activityKindObserve,
-				text:         "tool completed",
+				text:         "observe " + typed.ToolCallID + ": " + observeText,
 			})
 		}
 	}
@@ -208,7 +216,7 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.pendingPermission.Response <- false
 			m.pendingPermission = nil
 			m.resizeViewports()
-			return m, tea.Quit
+			return m.interruptRun("interrupted by user"), nil
 		case "y", "Y":
 			m.pendingPermission.Response <- true
 			m.pendingPermission = nil
@@ -226,7 +234,12 @@ func (m model) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "ctrl+c", "esc":
+	case "ctrl+c":
+		return m.handleCtrlC()
+	case "esc":
+		if m.running {
+			return m.interruptRun("interrupted by user"), nil
+		}
 		return m, tea.Quit
 	case "ctrl+y":
 		m.mouseEnabled = !m.mouseEnabled
@@ -301,6 +314,10 @@ func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 	if prompt == "" || m.running {
 		return m, nil
 	}
+	runCtx, cancel := context.WithCancel(m.ctx)
+	m.runCtx = runCtx
+	m.runCancel = cancel
+	m.lastIdleCtrlC = time.Time{}
 	m.input.SetValue("")
 	m.initialRun = false
 	m.running = true
@@ -311,7 +328,39 @@ func (m model) submitPrompt(input string) (tea.Model, tea.Cmd) {
 		text: prompt,
 	})
 	m.syncConversation(true)
-	return m, runAgent(m.ctx, m.session, prompt, &m)
+	return m, runAgent(runCtx, m.session, prompt, &m)
+}
+
+func (m model) handleCtrlC() (tea.Model, tea.Cmd) {
+	if m.running {
+		return m.interruptRun("interrupted by user"), nil
+	}
+
+	now := time.Now()
+	if !m.lastIdleCtrlC.IsZero() && now.Sub(m.lastIdleCtrlC) <= idleQuitDelay {
+		return m, tea.Quit
+	}
+
+	m.lastIdleCtrlC = now
+	m.clearVisibleOutput()
+	return m, nil
+}
+
+func (m model) interruptRun(reason string) model {
+	if m.runCancel != nil {
+		m.runCancel()
+	}
+	m.status = "interrupting"
+	m.appendActivity(activityKindSystem, reason)
+	return m
+}
+
+func (m *model) clearVisibleOutput() {
+	m.conversation = nil
+	m.logLines = nil
+	m.streamingIndex = -1
+	m.syncConversation(true)
+	m.syncLogs(true)
 }
 
 // handleAgentEvent applies a streamed agent event to the TUI state.
@@ -383,6 +432,8 @@ func (m model) handleAgentEvent(event agent.Event) model {
 		m.streamingIndex = -1
 		m.err = typed.Err
 		m.lastRunUsage = typed.Stats.TokenUsage
+		m.runCancel = nil
+		m.runCtx = nil
 		m.conversation = append(m.conversation, conversationItem{
 			role: conversationRoleAssistant,
 			text: "agent error: " + typed.Err.Error(),
@@ -394,6 +445,13 @@ func (m model) handleAgentEvent(event agent.Event) model {
 		m.streamingIndex = -1
 		m.err = nil
 		m.lastRunUsage = typed.Stats.TokenUsage
+		m.runCancel = nil
+		m.runCtx = nil
+		if typed.Reason == agent.TerminalAborted {
+			m.appendActivity(activityKindDone, "aborted")
+			m.running = false
+			return m
+		}
 		m.appendActivity(activityKindDone, "completed: "+string(typed.Reason))
 		m.running = false
 	}
@@ -771,9 +829,9 @@ func runAgent(ctx context.Context, session *session.Session, prompt string, m *m
 	if m.eventChan == nil && m.bus != nil {
 		m.eventChan = m.bus.Subscribe(bus.TopicAll)
 	}
-	
+
 	go session.Run(ctx, prompt)
-	
+
 	if m.eventChan != nil {
 		return waitAgentEvent(m.eventChan)
 	}

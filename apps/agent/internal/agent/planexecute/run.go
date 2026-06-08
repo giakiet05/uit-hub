@@ -2,6 +2,7 @@ package planexecute
 
 import (
 	"context"
+	"errors"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
@@ -20,6 +21,15 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 			Stats:     *stats,
 		})
 	}
+	abort := func() {
+		input.Conversation.Append(conversation.NewAssistantMessage("Run interrupted by user.", nil))
+		runState.Finish()
+		agent.EmitTerminal(events, agent.RunCompletedEvent{
+			SessionID: input.SessionID,
+			Reason:    agent.TerminalAborted,
+			Stats:     *stats,
+		})
+	}
 
 	fail := func(err error) {
 		runState.Finish()
@@ -35,9 +45,17 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 	}
 	input.Conversation.Append(conversation.NewUserMessage(input.UserPrompt))
 
+	if ctx.Err() != nil {
+		abort()
+		return
+	}
 
 	plan, err := a.createPlan(ctx, events, input, stats)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			abort()
+			return
+		}
 		fail(err)
 		return
 	}
@@ -56,6 +74,10 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 	results := []stepResult{}
 	replans := 0
 	for index := 0; index < len(plan.Steps); index++ {
+		if ctx.Err() != nil {
+			abort()
+			return
+		}
 		step := plan.Steps[index]
 		runState.Round = index + 1
 		stats.Rounds = index + 1
@@ -69,6 +91,10 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 
 		result, err := a.executeStep(ctx, events, input, step, state, stats)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				abort()
+				return
+			}
 			result = stepResult{StepID: step.ID, Status: "failed", Error: err.Error()}
 			results = append(results, result)
 			if !agent.Emit(ctx, events, agent.StepFailedEvent{SessionID: input.SessionID, StepID: step.ID, Err: err}) {
@@ -84,6 +110,10 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 			}
 			updated, err := a.replan(ctx, events, input, plan, results, state, stats)
 			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					abort()
+					return
+				}
 				fail(err)
 				return
 			}
@@ -107,6 +137,10 @@ func (a *PlanAndExecuteAgent) run(ctx context.Context, events chan<- agent.Event
 	}
 	answer, err := a.finalize(ctx, events, input, plan, results, state, stats)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			abort()
+			return
+		}
 		fail(err)
 		return
 	}

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
@@ -21,6 +22,7 @@ type Config struct {
 	MCP        MCPConfig
 	Tool       ToolConfig
 	Compaction CompactionConfig
+	Storage    StorageConfig
 }
 
 // AgentConfig contains agent loop limits.
@@ -34,6 +36,11 @@ type AgentConfig struct {
 // MemoryConfig contains long-term memory settings.
 type MemoryConfig struct {
 	Path string
+}
+
+// StorageConfig contains persistent conversation storage settings.
+type StorageConfig struct {
+	DBPath string
 }
 
 // ToolConfig contains tool registry settings.
@@ -77,19 +84,12 @@ func LoadEnv() error {
 
 // Load reads environment variables and validates the selected provider config.
 func Load() (Config, error) {
-	mcpConfig, err := loadMCPConfig(envOrDefault("MCP_CONFIG_PATH", "mcp.yaml"))
+	mcpConfig, err := loadMCPConfig(resolveDefaultConfigPath("MCP_CONFIG_PATH", "mcp.yaml"))
 	if err != nil {
 		return Config{}, err
 	}
 
-	factoryPath := os.Getenv("MODELS_CONFIG_PATH")
-	if factoryPath == "" {
-		if _, err := os.Stat("models.yaml"); err == nil {
-			factoryPath = "models.yaml"
-		} else {
-			factoryPath = filepath.Join("apps", "agent", "models.yaml")
-		}
-	}
+	factoryPath := resolveDefaultConfigPath("MODELS_CONFIG_PATH", "models.yaml")
 
 	logger := slog.Default() // You could also inject this or set up a dummy one for loading.
 	registry, err := LoadLLMRegistry(factoryPath, logger)
@@ -107,6 +107,9 @@ func Load() (Config, error) {
 		},
 		Memory: MemoryConfig{
 			Path: envOrDefault("MEMORY_PATH", "memory"),
+		},
+		Storage: StorageConfig{
+			DBPath: envOrDefault("STORAGE_DB_PATH", "agent.db"),
 		},
 		MCP: mcpConfig,
 		Tool: ToolConfig{
@@ -137,4 +140,40 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func resolveDefaultConfigPath(envKey, filename string) string {
+	if configured := strings.TrimSpace(os.Getenv(envKey)); configured != "" {
+		return configured
+	}
+
+	for _, candidate := range defaultConfigPathCandidates(filename) {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	return filepath.Join("apps", "agent", filename)
+}
+
+func defaultConfigPathCandidates(filename string) []string {
+	var candidates []string
+	if cwd, err := os.Getwd(); err == nil {
+		for dir := cwd; ; dir = filepath.Dir(dir) {
+			candidates = append(candidates,
+				filepath.Join(dir, filename),
+				filepath.Join(dir, "apps", "agent", filename),
+			)
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+		}
+	}
+
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(exe), filename))
+	}
+
+	return candidates
 }

@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
-	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/mcpadapter"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/memory"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestNewToolSetLoadsMockMCPToolCatalog(t *testing.T) {
@@ -23,7 +25,6 @@ func TestNewToolSetLoadsMockMCPToolCatalog(t *testing.T) {
 
 	repoRoot := filepath.Clean("../../../..")
 	cfg := config.Config{
-		Provider: llm.ProviderTypeOpenAI,
 		MCP: config.MCPConfig{
 			ClientName:    "uit-hub-agent-test",
 			ClientVersion: "0.1.0",
@@ -43,7 +44,7 @@ func TestNewToolSetLoadsMockMCPToolCatalog(t *testing.T) {
 		t.Fatalf("newMCPManager() error = %v", err)
 	}
 	defer closeAll(ctx, logging.NewNopLogger(), closers)
-	toolSet, err := newSessionToolSet(cfg, nil, mcpManager)
+	toolSet, err := newSessionToolSet(cfg, nil, mcpManager, nil)
 	if err != nil {
 		t.Fatalf("newSessionToolSet() error = %v", err)
 	}
@@ -99,7 +100,6 @@ func TestNewToolSetKeepsWorkingWhenMCPServerFails(t *testing.T) {
 	repoRoot := filepath.Clean("../../../..")
 	attemptFile := filepath.Join(t.TempDir(), "retry-attempt")
 	cfg := config.Config{
-		Provider: llm.ProviderTypeOpenAI,
 		MCP: config.MCPConfig{
 			ClientName:    "uit-hub-agent-test",
 			ClientVersion: "0.1.0",
@@ -127,7 +127,7 @@ func TestNewToolSetKeepsWorkingWhenMCPServerFails(t *testing.T) {
 		t.Fatalf("newMCPManager() error = %v", err)
 	}
 	defer closeAll(ctx, logging.NewNopLogger(), closers)
-	toolSet, err := newSessionToolSet(cfg, nil, mcpManager)
+	toolSet, err := newSessionToolSet(cfg, nil, mcpManager, nil)
 	if err != nil {
 		t.Fatalf("newSessionToolSet() error = %v", err)
 	}
@@ -156,7 +156,6 @@ func TestNewToolSetRegistersMemoryTools(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := config.Config{
-		Provider: llm.ProviderTypeOpenAI,
 		Memory: config.MemoryConfig{
 			Path: t.TempDir(),
 		},
@@ -166,7 +165,7 @@ func TestNewToolSetRegistersMemoryTools(t *testing.T) {
 		t.Fatalf("newMCPManager() error = %v", err)
 	}
 	defer closeAll(ctx, logging.NewNopLogger(), closers)
-	toolSet, err := newSessionToolSet(cfg, memory.NewFileStore(t.TempDir()), mcpManager)
+	toolSet, err := newSessionToolSet(cfg, memory.NewFileStore(t.TempDir()), mcpManager, nil)
 	if err != nil {
 		t.Fatalf("newSessionToolSet() error = %v", err)
 	}
@@ -181,4 +180,64 @@ func TestNewToolSetRegistersMemoryTools(t *testing.T) {
 			t.Fatalf("registered tools missing %q: %v", want, names)
 		}
 	}
+}
+
+func TestNewToolSetRestoresRuntimeTools(t *testing.T) {
+	cfg := config.Config{}
+	mcpManager := mcpadapter.NewManager()
+	restoredTool := appTestTool{name: "mock_uit__get_student_profile"}
+	client := mcpadapter.NewClient("mock_uit", appTestMCPSession{})
+	if err := mcpManager.AddLoadedTools("mock_uit", "Mock UIT", client, []tool.Tool{restoredTool}); err != nil {
+		t.Fatalf("AddLoadedTools() error = %v", err)
+	}
+
+	toolSet, err := newSessionToolSet(cfg, memory.NewFileStore(t.TempDir()), mcpManager, []string{"mock_uit__get_student_profile"})
+	if err != nil {
+		t.Fatalf("newSessionToolSet() error = %v", err)
+	}
+
+	names := []string{}
+	for _, definition := range toolSet.Definitions() {
+		names = append(names, definition.Name)
+	}
+	if !slices.Contains(names, "mock_uit__get_student_profile") {
+		t.Fatalf("runtime tool was not restored: %v", names)
+	}
+	if got := toolSet.RuntimeToolNames(); len(got) != 1 || got[0] != "mock_uit__get_student_profile" {
+		t.Fatalf("RuntimeToolNames() = %#v, want restored tool", got)
+	}
+}
+
+type appTestTool struct {
+	name string
+}
+
+func (t appTestTool) Definition() tool.Definition {
+	return tool.Definition{
+		Name:        t.name,
+		Description: "test tool",
+		InputSchema: tool.EmptyInputSchema(),
+	}
+}
+
+func (t appTestTool) Metadata() tool.Metadata {
+	return tool.NewReadOnlyMetadata(true)
+}
+
+func (t appTestTool) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {
+	return tool.Result{CallID: call.ID, Name: call.Name, Content: "ok"}, nil
+}
+
+type appTestMCPSession struct{}
+
+func (appTestMCPSession) ListTools(ctx context.Context, params *mcp.ListToolsParams) (*mcp.ListToolsResult, error) {
+	return &mcp.ListToolsResult{}, nil
+}
+
+func (appTestMCPSession) CallTool(ctx context.Context, params *mcp.CallToolParams) (*mcp.CallToolResult, error) {
+	return &mcp.CallToolResult{}, nil
+}
+
+func (appTestMCPSession) Close() error {
+	return nil
 }

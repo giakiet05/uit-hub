@@ -21,6 +21,7 @@ import (
 func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
 	var resume bool
 	var resumeID string
+	var resumePicker bool
 	if len(args) > 0 && args[0] == "resume" {
 		resume = true
 		args = args[1:]
@@ -28,18 +29,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 			resumeID = args[0]
 			args = args[1:]
 		} else {
-			// They want to resume but didn't provide an ID, open picker.
-			db, err := storage.InitDB("agent.db")
-			if err == nil {
-				sessions, err := db.ListSessions(10) // show up to 10 recent
-				if err == nil && len(sessions) > 0 {
-					resumeID = selectSessionTUI(sessions)
-					if resumeID == "" {
-						// User canceled picker
-						return nil
-					}
-				}
-			}
+			resumePicker = true
 		}
 	}
 
@@ -59,6 +49,18 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		logger.DebugContext(ctx, "Agent config load failed", "error", err)
 		return err
 	}
+	if resumePicker {
+		db, err := storage.InitDB(cfg.Storage.DBPath)
+		if err == nil {
+			sessions, err := db.ListSessions(10)
+			if err == nil && len(sessions) > 0 {
+				resumeID = selectSessionTUI(sessions)
+				if resumeID == "" {
+					return nil
+				}
+			}
+		}
+	}
 	logger.DebugContext(
 		ctx,
 		"Agent config loaded",
@@ -68,6 +70,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		"agent_max_rounds", cfg.Agent.MaxRounds,
 		"agent_tool_timeout", cfg.Agent.ToolTimeout.String(),
 		"memory_path", cfg.Memory.Path,
+		"storage_db_path", cfg.Storage.DBPath,
 		"tool_runtime_limit", cfg.Tool.RuntimeLimit,
 		"compaction_tool_result_budget_enabled", cfg.Compaction.ToolResultBudgetEnabled,
 		"compaction_tool_result_budget_max_chars", cfg.Compaction.ToolResultBudgetMaxChars,

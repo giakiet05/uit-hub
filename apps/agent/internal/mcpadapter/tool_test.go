@@ -55,6 +55,38 @@ func TestClientToolsWrapsMCPTools(t *testing.T) {
 	if got, want := idProperty["type"], "string"; got != want {
 		t.Fatalf("schema property type = %v, want %v", got, want)
 	}
+	if tools[0].Metadata().FinishOnInterrupt {
+		t.Fatal("read-only MCP tool should not finish on interrupt")
+	}
+}
+
+func TestClientToolsMarksApprovalToolsAsFinishOnInterrupt(t *testing.T) {
+	session := &fakeSession{
+		tools: []*mcp.Tool{
+			{
+				Name:        "send_email",
+				Description: "Send an email.",
+				InputSchema: map[string]any{
+					"type":             "object",
+					"_requireApproval": true,
+				},
+			},
+		},
+	}
+	client := NewClient("gmail", session)
+
+	tools, err := client.Tools(context.Background())
+	if err != nil {
+		t.Fatalf("Tools() error = %v", err)
+	}
+
+	metadata := tools[0].Metadata()
+	if !metadata.RequireApproval {
+		t.Fatal("RequireApproval = false, want true")
+	}
+	if !metadata.FinishOnInterrupt {
+		t.Fatal("FinishOnInterrupt = false, want true")
+	}
 }
 
 func TestToolExecuteCallsMCPTool(t *testing.T) {

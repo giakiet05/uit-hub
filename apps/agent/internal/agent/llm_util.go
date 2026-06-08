@@ -45,5 +45,8 @@ func GenerateWithStream(
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return llm.GenerateResponse{}, textStreamed, err
+	}
 	return llm.GenerateResponse{}, textStreamed, errors.New("llm stream closed without completion")
 }

@@ -19,6 +19,7 @@ type RunInput struct {
 	Tools           *tool.ToolSet
 	ResultBudgeter  *tool.ResultBudgeter
 	ConcurrentTools bool
+	ShutdownContext context.Context
 }
 
 // ToolDefinitions returns all tools visible to the model for this run.

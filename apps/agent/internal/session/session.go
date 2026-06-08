@@ -2,6 +2,7 @@
 package session
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -14,6 +15,21 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/usage"
 )
+
+// Snapshot is the persistable state of one session.
+type Snapshot struct {
+	ID               string
+	StartedAt        time.Time
+	Messages         []conversation.Message
+	Usage            Usage
+	RuntimeToolNames []string
+}
+
+// Store persists session snapshots. Storage backends such as SQLite,
+// PostgreSQL, or MongoDB can implement this interface.
+type Store interface {
+	Save(ctx context.Context, snapshot Snapshot) error
+}
 
 // State groups one conversation with session-scoped prompt, tool, and usage
 // state.
@@ -36,6 +52,18 @@ type Usage struct {
 	LLMCalls     int
 	ToolCalls    int
 	ToolFailures int
+}
+
+// AddRunStats accumulates one completed agent run into this usage value.
+func (u *Usage) AddRunStats(stats agent.RunStats) {
+	if u == nil {
+		return
+	}
+	u.Runs++
+	u.LLMCalls += stats.LLMCalls
+	u.ToolCalls += stats.ToolCalls
+	u.ToolFailures += stats.ToolFailures
+	u.TokenUsage.Add(stats.TokenUsage)
 }
 
 // Option configures a session state at construction time.
@@ -122,11 +150,7 @@ func (s *State) AddRunStats(stats agent.RunStats) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Usage.Runs++
-	s.Usage.LLMCalls += stats.LLMCalls
-	s.Usage.ToolCalls += stats.ToolCalls
-	s.Usage.ToolFailures += stats.ToolFailures
-	s.Usage.TokenUsage.Add(stats.TokenUsage)
+	s.Usage.AddRunStats(stats)
 }
 
 // GetUsage returns a safe copy of the current session usage metrics.
@@ -137,4 +161,20 @@ func (s *State) GetUsage() Usage {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.Usage
+}
+
+// Snapshot returns a copy of the session state suitable for persistence.
+func (s *State) Snapshot() Snapshot {
+	if s == nil {
+		return Snapshot{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return Snapshot{
+		ID:               s.ID,
+		StartedAt:        s.StartedAt,
+		Messages:         s.Conversation.Messages(),
+		Usage:            s.Usage,
+		RuntimeToolNames: s.Tools.RuntimeToolNames(),
+	}
 }

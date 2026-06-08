@@ -48,6 +48,9 @@ func (a *PlanAndExecuteAgent) executeStep(
 			observations = append(observations, result.Content)
 			stepMessages = append(stepMessages, conversation.NewToolResultMessage(result.CallID, result.Content))
 		}
+		if ctx.Err() != nil {
+			return stepResult{}, ctx.Err()
+		}
 	}
 
 	return stepResult{}, fmt.Errorf("step %q exceeded max executor rounds", step.ID)
