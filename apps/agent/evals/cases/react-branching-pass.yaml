@@ -1,0 +1,36 @@
+id: react-branching-pass
+title: Branching workflow using ReAct Agent
+purpose: >
+  Test if ReAct Agent can coordinate multiple independent data pulls and mutations across different domains.
+agent_type: react
+expected_result: pass
+required_min_rounds: 3
+required_tools:
+  native:
+    - load_mcp_tool
+    - calculator
+    - write_file
+    - read_file
+prompt: >
+  Làm đầy đủ các việc sau (lưu ý dùng load_mcp_tool để tải các tool cần thiết trước):
+  A. Tra trạng thái học phí (get_tuition_fee).
+  B. Tra điểm rèn luyện (get_training_points).
+  C. Dùng calculator tính: (số tiền học phí + điểm rèn luyện) / 2.
+  D. Xin gia hạn học phí (tuition extension) tới ngày 2026-07-01 với năm 2024, kỳ 1, lý do "Khó khăn tài chính".
+  E. Đăng ký giấy xác nhận sinh viên (confirm letter) bằng tiếng Anh (EN), lý do OTHER ("Testing"), loại NEW, note là kết quả phép tính ở bước C.
+  F. Ghi file report/react-branching-22520002.txt gồm 2 request_id vừa tạo, và kết quả phép tính.
+  G. Đọc lại file report. Trả lời gồm 2 request_id và file path.
+expected_workflow:
+  - Call load_mcp_tool.
+  - Call auth_login.
+  - Call tools for tuition and training points.
+  - Calculate average.
+  - Call tools for tuition extension and confirm letter.
+  - Write report.
+  - Read report.
+  - Final answer.
+success_criteria:
+  - Completes all branches.
+  - Final report and answer agree.
+failure_signals:
+  - Forgets a branch.

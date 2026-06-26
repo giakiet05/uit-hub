@@ -1,0 +1,39 @@
+id: orchestrator-longturn-pass
+title: Long Context (10-turn) workflow using Orchestrator
+purpose: >
+  Test if Orchestrator can maintain context across 10 consecutive prompts without context dilution.
+agent_type: orchestrator
+expected_result: pass
+required_min_rounds: 10
+required_tools:
+  native:
+    - procedure_agent
+    - academic_agent
+    - campus_agent
+prompts:
+  - "Xin chào, hãy nhớ mã sinh viên của tôi là 22520001."
+  - "Lấy điểm rèn luyện của tôi."
+  - "Tôi có bị nợ học phí không?"
+  - "Tìm tuyến xe bus đi từ KTX Khu B đến trường."
+  - "Kiểm tra xem tôi có đủ điều kiện làm giấy xác nhận sinh viên không (dựa vào điểm rèn luyện ở turn 2)."
+  - "Tiện thể xem lại tuyến xe bus số 33 có đi qua Suối Tiên không?"
+  - "Nhắc lại cho tôi mã sinh viên của tôi ở turn 1."
+  - "Tạo giấy xác nhận sinh viên (bản tiếng Việt)."
+  - "Ghi nội dung giấy xác nhận vừa tạo vào file longturn_report.txt."
+  - "Cuối cùng, hãy đọc file longturn_report.txt và nói cho tôi biết điểm rèn luyện và tình trạng học phí ghi trong đó."
+expected_workflow:
+  - Call academic_agent for training points (turn 2)
+  - Call procedure_agent for tuition (turn 3)
+  - Call campus_agent for bus (turn 4)
+  - Check conditions (turn 5)
+  - Call campus_agent for bus 33 (turn 6)
+  - Recall student ID (turn 7)
+  - Call procedure_agent for confirm letter (turn 8)
+  - Call write_file (turn 9)
+  - Call read_file and answer (turn 10)
+success_criteria:
+  - Completes all 10 turns.
+  - Final answer correctly references the content of the file which contains training points and tuition status.
+failure_signals:
+  - Forgets student ID.
+  - Fails to answer due to token limit exhaustion.

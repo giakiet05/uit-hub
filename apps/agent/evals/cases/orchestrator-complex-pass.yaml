@@ -1,0 +1,36 @@
+id: orchestrator-complex-pass
+title: Complex branching workflow using Orchestrator
+purpose: >
+  Test if Orchestrator can coordinate complex parallel paths with logic (calculate, write, procedure) 
+agent_type: orchestrator
+expected_result: pass
+required_min_rounds: 3
+required_tools:
+  native:
+    - academic_agent
+    - procedure_agent
+    - calculator
+    - write_file
+    - read_file
+prompt: >
+  Thực hiện chính xác các bước sau:
+  1. Tra cứu điểm rèn luyện của sinh viên và kiểm tra tình trạng học phí.
+  2. Dùng máy tính (calculator) nhân điểm rèn luyện với 1000.
+  3. Dùng kết quả vừa nhân để tạo một giấy xác nhận sinh viên (confirm letter), bản tiếng Việt (VI), loại NEW, phần note ghi kết quả đã nhân.
+  4. Nếu học phí đang NỢ (UNPAID hoặc DEBT), hãy tạo thêm một yêu cầu gia hạn học phí tới "2026-12-31" với lý do "Đợi học bổng".
+  5. Ghi mã request của giấy xác nhận và yêu cầu gia hạn (nếu có) vào file complex_report.txt.
+  6. Đọc lại file complex_report.txt và trả lời với kết quả đọc được.
+expected_workflow:
+  - Call academic_agent for training points and procedure_agent for tuition (parallel)
+  - Call calculator
+  - Call procedure_agent for confirm letter and maybe tuition extension (parallel)
+  - Write file
+  - Read file
+  - Final answer
+success_criteria:
+  - Executes parallel reads
+  - Executes calculation
+  - Executes procedure mutations
+  - Writes and reads correctly
+failure_signals:
+  - Missing any step

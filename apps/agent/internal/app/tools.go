@@ -8,10 +8,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/react"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/localtool"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/mcpadapter"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/memory"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/prompt"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/tool"
 )
 
@@ -88,8 +92,13 @@ func newSessionToolSet(
 	cfg config.Config,
 	memoryStore memory.Store,
 	mcpManager *mcpadapter.Manager,
+	model llm.Model,
 	runtimeToolNames []string,
 ) (*tool.ToolSet, error) {
+	if cfg.Agent.Type == agent.TypeOrchestrator {
+		return newOrchestratorToolSet(cfg, memoryStore, mcpManager, model, runtimeToolNames)
+	}
+
 	runtimeRegistry := tool.NewRuntimeRegistry(cfg.Tool.RuntimeLimit)
 
 	baseRegistry, err := tool.NewBaseRegistry(
@@ -119,6 +128,84 @@ func newSessionToolSet(
 	}
 
 	return tool.NewToolSet(baseRegistry, runtimeRegistry), nil
+}
+
+func newOrchestratorToolSet(
+	cfg config.Config,
+	memoryStore memory.Store,
+	mcpManager *mcpadapter.Manager,
+	model llm.Model,
+	runtimeToolNames []string,
+) (*tool.ToolSet, error) {
+	buildSubAgent := func(name, desc, serverName string, staticPrompt prompt.StaticPart) tool.Tool {
+		runtimeReg := tool.NewRuntimeRegistry(cfg.Tool.RuntimeLimit)
+		if mcpManager != nil {
+			for _, t := range mcpManager.Catalog() {
+				if t.ServerName == serverName {
+					if restored, ok := mcpManager.LoadTool(t.Name); ok {
+						_ = runtimeReg.Register(restored)
+					}
+				}
+			}
+		}
+
+		baseReg, _ := tool.NewBaseRegistry(localtool.NewCalculator())
+		toolSet := tool.NewToolSet(baseReg, runtimeReg)
+		
+		importReact := "github.com/giakiet05/uit-hub/apps/agent/internal/agent/react"
+		_ = importReact // imported above
+		
+		subAgent := react.NewReActAgent(model, react.WithMaxRounds(4), react.WithToolTimeout(cfg.Agent.ToolTimeout))
+		promptBuilder := func() prompt.SystemPrompt {
+			return prompt.SystemPrompt{
+				StaticParts: []prompt.StaticPart{
+					prompt.IdentityStaticPrompt(),
+					prompt.BehaviorStaticPrompt(),
+					prompt.ToolUsageStaticPrompt(),
+					prompt.SubAgentRulesStaticPrompt(),
+					staticPrompt,
+				},
+				DynamicParts: []prompt.DynamicPart{},
+			}
+		}
+		def := tool.Definition{
+			Name:        name,
+			Description: desc,
+			InputSchema: tool.JSONSchema{
+				"type": "object",
+				"properties": map[string]any{
+					"task": map[string]any{
+						"type":        "string",
+						"description": "The specific task instruction for the sub-agent",
+					},
+				},
+				"required": []string{"task"},
+			},
+		}
+		return localtool.NewSubAgentTool(def, subAgent, toolSet, promptBuilder)
+	}
+
+	academicTool := buildSubAgent("academic_agent", "Delegate tasks related to academic profile, schedule, scores, courses, deadlines, and assignments.", "mcp_academic", prompt.AcademicAgentStaticPrompt())
+	procedureTool := buildSubAgent("procedure_agent", "Delegate tasks related to student procedures, administrative forms, tuition, insurance, transcript requests, confirm letters, bank loans, language certificates, and graduation.", "mcp_procedure", prompt.ProcedureAgentStaticPrompt())
+	campusTool := buildSubAgent("campus_agent", "Delegate tasks related to campus info, available rooms, list of students, and general feedback/contacts.", "mcp_campus", prompt.CampusAgentStaticPrompt())
+
+	orchRuntimeReg := tool.NewRuntimeRegistry(cfg.Tool.RuntimeLimit)
+	orchBaseReg, err := tool.NewBaseRegistry(
+		academicTool,
+		procedureTool,
+		campusTool,
+		localtool.NewCalculator(),
+		localtool.NewReadFile("tmp/agent-files"),
+		localtool.NewWriteFile("tmp/agent-files"),
+		localtool.NewMemoryRead(memoryStore),
+		localtool.NewMemoryWrite(memoryStore),
+		localtool.NewMemoryList(memoryStore),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return tool.NewToolSet(orchBaseReg, orchRuntimeReg), nil
 }
 
 func closeAll(ctx context.Context, logger *slog.Logger, closers []io.Closer) {

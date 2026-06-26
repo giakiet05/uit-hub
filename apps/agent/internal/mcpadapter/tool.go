@@ -37,6 +37,25 @@ func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
 				}
 				delete(m, "_requireApproval")
 
+				// Strip "token" from schema to hide it from LLM
+				if props, ok := m["properties"].(map[string]any); ok {
+					delete(props, "token")
+				}
+				if reqs, ok := m["required"].([]any); ok {
+					newReqs := make([]any, 0, len(reqs))
+					for _, req := range reqs {
+						if r, ok := req.(string); ok && r == "token" {
+							continue
+						}
+						newReqs = append(newReqs, req)
+					}
+					if len(newReqs) == 0 {
+						delete(m, "required")
+					} else {
+						m["required"] = newReqs
+					}
+				}
+
 				mcpTool.InputSchema = m
 			}
 		}
@@ -65,6 +84,14 @@ func NewTool(serverName string, session Session, mcpTool *mcp.Tool) *Tool {
 
 // Execute calls the underlying MCP tool and flattens the result for the model.
 func (t *Tool) Execute(ctx context.Context, call tool.Call) (tool.Result, error) {
+	// Inject token from context if present
+	if token, ok := ctx.Value(TokenKey).(string); ok && token != "" {
+		if call.Arguments == nil {
+			call.Arguments = make(map[string]any)
+		}
+		call.Arguments["token"] = token
+	}
+
 	result, err := t.session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      t.mcpTool.Name,
 		Arguments: call.Arguments,

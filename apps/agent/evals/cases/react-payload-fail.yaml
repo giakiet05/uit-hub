@@ -1,0 +1,19 @@
+id: react-payload-fail
+title: Massive Payload workflow using ReAct
+purpose: >
+  Demonstrate ReAct token explosion and context dilution when dealing with massive file outputs.
+agent_type: react
+expected_result: fail
+required_min_rounds: 2
+required_tools:
+  native: []
+prompts:
+  - "Đọc file handbook.txt và tìm cho tôi Mật mã để xin giấy xác nhận đặc biệt."
+  - "Bây giờ dùng mật mã đó (làm note) để tạo giấy xác nhận sinh viên bản tiếng Anh."
+expected_workflow:
+  - Call read_file.
+  - Call create_confirm_letter.
+success_criteria:
+  - Fails due to token explosion or hallucination.
+failure_signals:
+  - Completes successfully without context issues (unexpected).

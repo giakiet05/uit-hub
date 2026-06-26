@@ -1,0 +1,37 @@
+id: orchestrator-branching-pass
+title: Branching workflow using Orchestrator
+purpose: >
+  Test if Orchestrator can coordinate multiple independent data pulls and mutations across different domains.
+agent_type: orchestrator
+expected_result: pass
+required_min_rounds: 3
+required_tools:
+  native:
+    - academic_agent
+    - procedure_agent
+    - calculator
+    - write_file
+    - read_file
+prompt: >
+  Làm đầy đủ các việc sau:
+  A. Tra trạng thái học phí.
+  B. Tra điểm rèn luyện.
+  C. Dùng calculator tính: (số tiền học phí + điểm rèn luyện) / 2.
+  D. Xin gia hạn học phí (tuition extension) tới ngày 2026-07-01 với năm 2024, kỳ 1, lý do "Khó khăn tài chính".
+  E. Đăng ký giấy xác nhận sinh viên (confirm letter) bằng tiếng Anh (EN), lý do OTHER ("Testing"), loại NEW, note là kết quả phép tính ở bước C.
+  F. Ghi file report/branching-22520002.txt gồm 2 request_id vừa tạo, và kết quả phép tính.
+  G. Đọc lại file report. Trả lời gồm 2 request_id và file path.
+expected_workflow:
+  - Call procedure_agent for tuition.
+  - Call academic_agent for training points.
+  - Calculate average.
+  - Call procedure_agent for tuition extension.
+  - Call procedure_agent for confirm letter.
+  - Write report.
+  - Read report.
+  - Final answer.
+success_criteria:
+  - Completes all branches.
+  - Final report and answer agree.
+failure_signals:
+  - Forgets a branch.

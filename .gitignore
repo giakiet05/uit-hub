@@ -25,4 +25,5 @@ coverage.out
 apps/fake-uit-server/server
  
 TODO.md
-*.db
+*.dbapps/agent/evals/results/
+apps/agent/eval

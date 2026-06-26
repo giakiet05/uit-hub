@@ -13,6 +13,7 @@ import (
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/conversation"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 )
 
 // Runner executes eval cases against the shared agent runtime.
@@ -37,33 +38,6 @@ func (r *Runner) RunCase(ctx context.Context, testCase Case, outputRoot string) 
 		cfg.Agent.Type = agent.Type(testCase.AgentType)
 	}
 
-	runtime, err := app.NewRuntime(ctx, cfg, r.logger, false, "")
-	if err != nil {
-		return Result{}, "", err
-	}
-	defer runtime.Close(ctx)
-
-	runtimeAgent, err := newEvalAgent(cfg)
-	if err != nil {
-		return Result{}, "", err
-	}
-	runtime.Session.SetAgent(runtimeAgent)
-
-	recorder := NewRecorder(testCase)
-	eventChan := runtime.Bus.Subscribe(bus.TopicAll)
-	events := agentEvents(eventChan)
-	go runtime.Session.Run(ctx, testCase.Prompt)
-	recorder.Consume(ctx, events)
-
-	result := recorder.Finish(Judge(testCase, recorder.result))
-	reportDir, err := WriteReport(outputRoot, testCase, result, recorder.Trace())
-	if err != nil {
-		return Result{}, "", err
-	}
-	return result, reportDir, nil
-}
-
-func newEvalAgent(cfg config.Config) (agent.Agent, error) {
 	providerName := os.Getenv("DEFAULT_PROVIDER")
 	if providerName == "" {
 		providerName = "openai"
@@ -74,8 +48,50 @@ func newEvalAgent(cfg config.Config) (agent.Agent, error) {
 	}
 	model, err := cfg.Registry.GetModel(providerName, modelName)
 	if err != nil {
-		return nil, err
+		return Result{}, "", err
 	}
+
+	runtime, err := app.NewRuntime(ctx, cfg, r.logger, model, false, "")
+	if err != nil {
+		return Result{}, "", err
+	}
+	defer runtime.Close(ctx)
+
+	runtimeAgent, err := newEvalAgent(cfg, model)
+	if err != nil {
+		return Result{}, "", err
+	}
+	runtime.Session.SetAgent(runtimeAgent)
+
+	prompts := testCase.Prompts
+	if len(prompts) == 0 && testCase.Prompt != "" {
+		prompts = []string{testCase.Prompt}
+	}
+
+	recorder := NewRecorder(testCase)
+	eventChan := runtime.Bus.Subscribe(bus.TopicAll)
+	
+	runDone := make(chan struct{})
+	events := agentEvents(eventChan, runDone)
+	
+	go func() {
+		defer close(runDone)
+		for _, p := range prompts {
+			runtime.Session.Run(ctx, p)
+		}
+	}()
+	
+	recorder.Consume(ctx, events)
+
+	result := recorder.Finish(Judge(testCase, recorder.result))
+	reportDir, err := WriteReport(outputRoot, testCase, result, recorder.Trace())
+	if err != nil {
+		return Result{}, "", err
+	}
+	return result, reportDir, nil
+}
+
+func newEvalAgent(cfg config.Config, model llm.Model) (agent.Agent, error) {
 
 	if cfg.Agent.Type == agent.TypePlanAndExecute {
 		return planexecute.NewPlanAndExecuteAgent(
@@ -109,19 +125,26 @@ func newEvalAgent(cfg config.Config) (agent.Agent, error) {
 	), nil
 }
 
-func agentEvents(eventChan bus.EventChan) <-chan agent.Event {
+func agentEvents(eventChan bus.EventChan, runDone <-chan struct{}) <-chan agent.Event {
 	events := make(chan agent.Event)
 	go func() {
 		defer close(events)
-		for event := range eventChan {
-			agentEvent, ok := event.(agent.Event)
-			if !ok {
-				continue
-			}
-			events <- agentEvent
-			switch agentEvent.(type) {
-			case agent.RunCompletedEvent, agent.RunFailedEvent:
+		for {
+			select {
+			case <-runDone:
 				return
+			case event, ok := <-eventChan:
+				if !ok {
+					return
+				}
+				agentEvent, ok := event.(agent.Event)
+				if !ok {
+					continue
+				}
+				events <- agentEvent
+				if req, ok := agentEvent.(agent.ToolPermissionRequestEvent); ok {
+					req.Response <- true
+				}
 			}
 		}
 	}()

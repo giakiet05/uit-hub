@@ -7,6 +7,7 @@ import (
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/event/bus"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/llm"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/session"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/storage"
 )
@@ -20,7 +21,7 @@ type Runtime struct {
 }
 
 // NewRuntime wires memory, tools, prompt, and session state.
-func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, resume bool, resumeID string) (*Runtime, error) {
+func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, model llm.Model, resume bool, resumeID string) (*Runtime, error) {
 
 	memoryStore := newMemoryStore(cfg)
 
@@ -66,7 +67,7 @@ func NewRuntime(ctx context.Context, cfg config.Config, logger *slog.Logger, res
 		}
 	}
 
-	sessionState, err := newSessionState(ctx, state, runtimeToolNames, sessionOpts...)
+	sessionState, err := newSessionState(ctx, state, model, runtimeToolNames, sessionOpts...)
 	if err != nil {
 		logger.DebugContext(ctx, "Session initialization failed", "error", err)
 		closeAll(ctx, logger, closers)

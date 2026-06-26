@@ -1,0 +1,26 @@
+id: react-longturn-fail
+title: Long Context (10-turn) workflow using ReAct
+purpose: >
+  Demonstrate ReAct's failure in long context conversations due to attention dilution and token exhaustion.
+agent_type: react
+expected_result: fail
+required_min_rounds: 10
+required_tools:
+  native: []
+prompts:
+  - "Xin chào, hãy nhớ mã sinh viên của tôi là 22520001."
+  - "Lấy điểm rèn luyện của tôi."
+  - "Tôi có bị nợ học phí không?"
+  - "Tìm tuyến xe bus đi từ KTX Khu B đến trường."
+  - "Kiểm tra xem tôi có đủ điều kiện làm giấy xác nhận sinh viên không (dựa vào điểm rèn luyện ở turn 2)."
+  - "Tiện thể xem lại tuyến xe bus số 33 có đi qua Suối Tiên không?"
+  - "Nhắc lại cho tôi mã sinh viên của tôi ở turn 1."
+  - "Tạo giấy xác nhận sinh viên (bản tiếng Việt)."
+  - "Ghi nội dung giấy xác nhận vừa tạo vào file longturn_report.txt."
+  - "Cuối cùng, hãy đọc file longturn_report.txt và nói cho tôi biết điểm rèn luyện và tình trạng học phí ghi trong đó."
+expected_workflow:
+  - Attempt to call multiple tools over 10 turns.
+success_criteria:
+  - Fail to complete or forget context.
+failure_signals:
+  - Completes all turns successfully (unexpected).

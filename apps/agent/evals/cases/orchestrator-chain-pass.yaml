@@ -1,0 +1,36 @@
+id: orchestrator-chain-pass
+title: Linear workflow using Orchestrator and SubAgents
+purpose: >
+  Establish a baseline where Orchestrator coordinates academic and procedure
+  sub-agents in a chain.
+agent_type: orchestrator
+expected_result: pass
+required_min_rounds: 3
+required_tools:
+  native:
+    - academic_agent
+    - procedure_agent
+    - calculator
+    - write_file
+    - read_file
+prompt: >
+  Dùng các sub-agent để làm việc sau: Tra hồ sơ sinh viên và điểm rèn luyện.
+  Lấy điểm rèn luyện (chỉ số nguyên) cộng thêm 15 bằng native calculator.
+  Tiếp theo, tạo một giấy xác nhận điểm rèn luyện (training point confirm) bằng tiếng Việt (VI), note ghi là "Điểm mới: [kết quả tính]".
+  Ghi file report/chain-22520001.txt gồm họ tên, điểm rèn luyện gốc, kết quả tính, và request_id của giấy xác nhận.
+  Đọc lại file report. Trả lời ngắn gọn gồm request_id và file path.
+expected_workflow:
+  - Call academic_agent to get profile and training points.
+  - Call calculator to add 15.
+  - Call procedure_agent to create training point confirm with the calculation result.
+  - Call write_file for the report.
+  - Call read_file to verify.
+  - Final answer.
+success_criteria:
+  - Uses at least 4 distinct tools.
+  - Final answer includes request_id and file path.
+failure_signals:
+  - Invents ID without a tool observation.
+  - Skips reading the report.
+notes: >
+  This tests if Orchestrator can effectively delegate sequential tasks.

@@ -53,7 +53,7 @@ func (r *Recorder) Record(event agent.Event) {
 	case agent.RunStartedEvent:
 		r.addTrace("run started: max_rounds=%d", typed.MaxRounds)
 	case agent.RoundStartedEvent:
-		r.result.RoundCount = typed.Round
+		// We do not overwrite RoundCount here for multi-turn to work organically.
 		r.addTrace("round %d: messages=%d tools=%d", typed.Round, typed.MessageCount, typed.ToolCount)
 	case agent.ModelCallStartedEvent:
 		r.result.LLMCalls++
@@ -93,19 +93,11 @@ func (r *Recorder) Record(event agent.Event) {
 		r.addTrace("round %d: final answer: %s", typed.Round, preview(r.result.FinalAnswer))
 	case agent.RunCompletedEvent:
 		r.result.TerminalReason = typed.Reason
-		r.result.RoundCount = typed.Stats.Rounds
-		r.result.LLMCalls = typed.Stats.LLMCalls
-		r.result.ToolCalls = typed.Stats.ToolCalls
-		r.result.ToolFailures = typed.Stats.ToolFailures
-		r.result.TokenUsage = typed.Stats.TokenUsage
+		r.result.RoundCount += typed.Stats.Rounds // Accumulated per run
 		r.addTrace("run completed: %s", typed.Reason)
 	case agent.RunFailedEvent:
 		r.result.Error = typed.Err.Error()
-		r.result.RoundCount = typed.Stats.Rounds
-		r.result.LLMCalls = typed.Stats.LLMCalls
-		r.result.ToolCalls = typed.Stats.ToolCalls
-		r.result.ToolFailures = typed.Stats.ToolFailures
-		r.result.TokenUsage = typed.Stats.TokenUsage
+		r.result.RoundCount += typed.Stats.Rounds
 		r.addTrace("run failed: %s", typed.Err.Error())
 	}
 }

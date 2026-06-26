@@ -1,0 +1,23 @@
+id: orchestrator-payload-pass
+title: Massive Payload workflow using Orchestrator
+purpose: >
+  Test if Orchestrator can handle huge file outputs without polluting its own context.
+agent_type: orchestrator
+expected_result: pass
+required_min_rounds: 2
+required_tools:
+  native:
+    - procedure_agent
+    - read_file
+prompts:
+  - "Đọc file handbook.txt và tìm cho tôi Mật mã để xin giấy xác nhận đặc biệt."
+  - "Bây giờ dùng mật mã đó (làm note) để tạo giấy xác nhận sinh viên bản tiếng Anh."
+expected_workflow:
+  - Call procedure_agent to read file and find secret code.
+  - Call procedure_agent to create letter using the secret code.
+success_criteria:
+  - Successfully find 'SECRET_UIT_2026'.
+  - Successfully creates the document.
+failure_signals:
+  - Fails to find the secret code.
+  - Fails to create the document.
