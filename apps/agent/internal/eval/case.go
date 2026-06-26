@@ -17,6 +17,7 @@ type Case struct {
 	RequiredMinRounds int           `yaml:"required_min_rounds" json:"required_min_rounds"`
 	RequiredTools     RequiredTools `yaml:"required_tools" json:"required_tools"`
 	Prompt            string        `yaml:"prompt" json:"prompt"`
+	Prompts           []string      `yaml:"prompts" json:"prompts"`
 	ExpectedWorkflow  []string      `yaml:"expected_workflow" json:"expected_workflow"`
 	SuccessCriteria   []string      `yaml:"success_criteria" json:"success_criteria"`
 	FailureSignals    []string      `yaml:"failure_signals" json:"failure_signals"`

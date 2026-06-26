@@ -8,6 +8,8 @@ const (
 	TypeReAct Type = "react"
 	// TypePlanAndExecute identifies the single-agent plan-and-execute agent.
 	TypePlanAndExecute Type = "plan_and_execute"
+	// TypeOrchestrator identifies the multi-agent orchestrator agent.
+	TypeOrchestrator Type = "orchestrator"
 )
 
 // String returns the stable prompt/type identifier for this agent type.

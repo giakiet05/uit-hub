@@ -1,7 +1,13 @@
-go 1.25.0
+go 1.26.4
 
 use ./apps/fake-uit-server
 
 use ./apps/agent
 
-use ./apps/mock-mcp-server
+use (
+	./apps/mcp-server
+	./apps/mcp-servers/academic
+	./apps/mcp-servers/campus
+	./apps/mcp-servers/procedure
+	./apps/mock-mcp-server
+)

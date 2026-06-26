@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/orchestrator"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/planexecute"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/agent/react"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
@@ -93,12 +94,6 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 	)
 	logger.DebugContext(ctx, "Starting agent app", "llm_provider", os.Getenv("DEFAULT_PROVIDER"))
 
-	runtime, err := NewRuntime(ctx, cfg, logger, resume, resumeID)
-	if err != nil {
-		return err
-	}
-	defer runtime.Close(ctx)
-
 	providerName := os.Getenv("DEFAULT_PROVIDER")
 	if providerName == "" {
 		providerName = "openai"
@@ -114,8 +109,20 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, 
 		return err
 	}
 
+	runtime, err := NewRuntime(ctx, cfg, logger, model, resume, resumeID)
+	if err != nil {
+		return err
+	}
+	defer runtime.Close(ctx)
+
 	var runtimeAgent agent.Agent
 	switch cfg.Agent.Type {
+	case agent.TypeOrchestrator:
+		runtimeAgent = orchestrator.NewOrchestratorAgent(
+			model,
+			react.WithMaxRounds(cfg.Agent.MaxRounds),
+			react.WithToolTimeout(cfg.Agent.ToolTimeout),
+		)
 	case agent.TypePlanAndExecute:
 		runtimeAgent = planexecute.NewPlanAndExecuteAgent(
 			model,

@@ -95,6 +95,9 @@ func (c *Client) Tools(ctx context.Context) ([]tool.Tool, error) {
 
 	tools := make([]tool.Tool, 0, len(result.Tools))
 	for _, serverTool := range result.Tools {
+		if serverTool.Name == "auth_login" {
+			continue
+		}
 		tools = append(tools, NewTool(c.serverName, c.session, serverTool))
 	}
 	return tools, nil

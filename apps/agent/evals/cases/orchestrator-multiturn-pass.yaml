@@ -1,0 +1,28 @@
+id: orchestrator-multiturn-pass
+title: Multi-turn workflow using Orchestrator
+purpose: >
+  Test if Orchestrator can maintain context across multiple consecutive prompts (conversational turns).
+agent_type: orchestrator
+expected_result: pass
+required_min_rounds: 3
+required_tools:
+  native:
+    - academic_agent
+    - procedure_agent
+    - write_file
+    - read_file
+prompts:
+  - "Lấy điểm rèn luyện của tôi."
+  - "Kiểm tra xem tôi có đang nợ học phí không."
+  - "Sử dụng điểm rèn luyện ở câu 1 và tình trạng học phí ở câu 2, hãy tạo một giấy xác nhận sinh viên (bản tiếng Việt, phần note ghi rõ 'Điểm rèn luyện là X, học phí là Y'). Sau đó ghi kết quả vào file multiturn_report.txt và đọc lại."
+expected_workflow:
+  - Call academic_agent for training points (turn 1)
+  - Call procedure_agent for tuition (turn 2)
+  - Call procedure_agent for confirm letter, write file, read file (turn 3)
+  - Final answer.
+success_criteria:
+  - Completes all 3 turns.
+  - Context is preserved (correctly references points and tuition).
+failure_signals:
+  - Forgets data from previous turns.
+  - Fails to write or read file.

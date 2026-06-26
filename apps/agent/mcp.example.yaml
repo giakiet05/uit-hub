@@ -3,11 +3,29 @@ client:
   version: 0.1.0
 
 servers:
-  - name: mock_uit
-    description: Mock UIT MCP server with academic, advising, and compaction test tools.
+  - name: mcp_academic
+    description: UIT Hub Academic MCP Server.
     transport: stdio
     command: go
     args:
       - run
-      - ../mock-mcp-server/cmd/server
+      - ../mcp-servers/academic/cmd/main.go
+    workdir: ""
+
+  - name: mcp_procedure
+    description: UIT Hub Procedure MCP Server.
+    transport: stdio
+    command: go
+    args:
+      - run
+      - ../mcp-servers/procedure/cmd/main.go
+    workdir: ""
+
+  - name: mcp_campus
+    description: UIT Hub Campus MCP Server.
+    transport: stdio
+    command: go
+    args:
+      - run
+      - ../mcp-servers/campus/cmd/main.go
     workdir: ""

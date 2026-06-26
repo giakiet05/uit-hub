@@ -12,6 +12,7 @@ import (
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/eval"
+	"github.com/giakiet05/uit-hub/apps/agent/internal/mcpadapter"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/logging"
 )
 
@@ -64,6 +65,9 @@ func run(ctx context.Context, args []string, stderr *os.File) error {
 		return err
 	}
 	cfg.Agent.MaxRounds = maxRounds
+
+	// Mock SSO Login for eval runs
+	ctx = context.WithValue(ctx, mcpadapter.TokenKey, "mock-22520001")
 
 	logger := logging.NewLogger(stderr)
 	runner := eval.NewRunner(cfg, logger)
