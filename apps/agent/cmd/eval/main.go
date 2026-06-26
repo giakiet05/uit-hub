@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"os/exec"
 
 	"github.com/giakiet05/uit-hub/apps/agent/internal/config"
 	"github.com/giakiet05/uit-hub/apps/agent/internal/eval"
@@ -87,6 +88,11 @@ func run(ctx context.Context, args []string, stderr *os.File) error {
 		// Clean up the hardcoded agent workspace to prevent state leakage between cases.
 		os.RemoveAll("tmp/agent-files")
 		os.MkdirAll("tmp/agent-files", 0755)
+
+		// Copy any data files from evals/cases/data/ to the sandbox
+		if _, err := os.Stat("evals/cases/data"); err == nil {
+			exec.Command("cp", "-r", "evals/cases/data/.", "tmp/agent-files/").Run()
+		}
 
 		caseCtx, cancel := context.WithTimeout(ctx, timeout)
 		result, reportDir, err := runner.RunCase(caseCtx, testCase, outputDir)
